@@ -1,6 +1,6 @@
 # ShadowLib
 
-> **Pre-release — `0.1.0-preview.1`.** Public API may break before `1.0.0`. Pin a specific Git tag or version when consuming.
+> **Pre-release — `0.1.0-preview.3`.** Public API may break before `1.0.0`. Pin a specific Git tag or version when consuming.
 
 ShadowLib is a deterministic-RNG and procedural-generation toolkit for games. It is plain C# targeting **`netstandard2.1`** — usable in Unity (2021.3 LTS+) and in any non-Unity .NET project.
 
@@ -28,7 +28,7 @@ https://github.com/MrRyzen/ShadowLib.git
 To pin a release:
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.1
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.3
 ```
 
 ### 2. Unity — Local package path

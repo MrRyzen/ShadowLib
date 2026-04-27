@@ -4,6 +4,17 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+## [0.1.0-preview.3] — 2026-04-27
+
+### Fixed
+
+- `WeightModifier.Stage`: removed the `= 999` auto-property initializer that required C# 10+ and broke compilation on Unity 2021.3 LTS (C# 9 — auto-property initializers in structs require C# 10).
+
+### Changed
+
+- **Behavior change:** `WeightModifier.Stage` now defaults to `0` instead of `999`. Modifiers constructed without an explicit `Stage` will now apply *first* rather than *last*. Set `Stage` explicitly on any modifier whose ordering matters.
+- `.gitignore`: added `.claude/` so local Claude Code session state stays out of the repo.
+
 ## [0.1.0-preview.2] — 2026-04-27
 
 ### Added
@@ -55,6 +66,7 @@ Initial pre-release. Repository restructured for Unity UPM consumption alongside
 - `XorShift128` does not fully implement `IRandom` (legacy).
 - Roadmap items not yet implemented: `EffectWheel`, `SparseGraph<T>`, `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, BSP / WFC / Maze gen.
 
-[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.2...HEAD
+[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.3...HEAD
+[0.1.0-preview.3]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.2...v0.1.0-preview.3
 [0.1.0-preview.2]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.1...v0.1.0-preview.2
 [0.1.0-preview.1]: https://github.com/MrRyzen/ShadowLib/releases/tag/v0.1.0-preview.1

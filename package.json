@@ -1,6 +1,6 @@
 {
   "name": "com.shadowlib.core",
-  "version": "0.1.0-preview.2",
+  "version": "0.1.0-preview.3",
   "displayName": "ShadowLib",
   "description": "Deterministic RNG, spatial primitives (Grid2D, FieldGrid, Polyomino), and procedural generation building blocks (BinPacker, weighted tables, simplex noise) for games. Pure C#, no Unity engine references in Runtime — usable in non-Unity .NET projects too.",
   "unity": "2021.3",

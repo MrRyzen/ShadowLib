@@ -29,7 +29,7 @@ If you can't decide between modules, follow the dependency arrow: most things ul
 `Window → Package Manager → + → Add package from git URL…`
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.1
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.3
 ```
 
 Always pin a tag — `main` will move under you.
@@ -464,7 +464,7 @@ Read this section before generating ShadowLib code.
 
 ### Do not hallucinate these
 
-The following do **not** exist (as of `0.1.0-preview.1`):
+The following do **not** exist (as of `0.1.0-preview.3`):
 
 - `UUID.V4()` / `UUID.V5()` — the methods are `GenerateRandomUUID()` and `GenerateDeterministicUUID(ulong seed, ulong context)`.
 - `Orchestrator.GetRng(string)` — it's `CreateRNG(string)`, which both creates and caches.

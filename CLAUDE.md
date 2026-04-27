@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository
 
-ShadowLib is a deterministic RNG + procedural/spatial primitives library for games, **structured as a Unity UPM package at the repo root** that also builds as a plain .NET solution. It is pre-release (`0.1.0-preview.1`).
+ShadowLib is a deterministic RNG + procedural/spatial primitives library for games, **structured as a Unity UPM package at the repo root** that also builds as a plain .NET solution. It is pre-release (`0.1.0-preview.3`).
 
 The repo doubles as:
 - A Unity package (consumed via `package.json`, `Runtime/`, `Tests/Runtime/`, `Samples~/`, asmdefs).

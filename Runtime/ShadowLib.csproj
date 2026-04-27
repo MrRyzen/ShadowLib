@@ -13,7 +13,7 @@
     <!-- Package metadata (used by `dotnet pack`) -->
     <IsPackable>true</IsPackable>
     <PackageId>ShadowLib</PackageId>
-    <Version>0.1.0-preview.2</Version>
+    <Version>0.1.0-preview.3</Version>
     <Authors>ShadowLib contributors</Authors>
     <Description>Deterministic RNG, spatial primitives, and procedural generation building blocks for games. Unity-compatible (netstandard2.1).</Description>
     <PackageTags>rng;random;deterministic;procedural;spatial;polyomino;noise;unity;gamedev</PackageTags>
