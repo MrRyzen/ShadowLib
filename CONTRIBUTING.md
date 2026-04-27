@@ -28,6 +28,18 @@ The expected flow for adding (e.g.) a new RNG distribution:
 6. **Update the roadmap.** Move the row from "Pending" to "Done" in `SHADOWLIB_ROADMAP.md`.
 7. **Update `CHANGELOG.md`** under `[Unreleased]`.
 
+## Unity `.meta` files
+
+Every Unity-shipped asset (every folder, `.cs` file, `.asmdef`, and root manifest like `package.json`/`README.md`) needs a sibling `.meta` file with a stable GUID. Unity refuses to import packages that are missing them ("immutable folder, asset will be ignored"), so they MUST be committed to source.
+
+When you add a new `.cs`, `.asmdef`, or folder under `Runtime/`, `Tests/`, or `Editor/`, run:
+
+```bash
+bash scripts/generate-unity-meta.sh
+```
+
+The script is idempotent and only creates `.meta` files that are missing — it never touches existing ones. GUIDs are derived from the asset's repo-relative path (md5), so the first generation locks the GUID in forever; re-running the script after the file exists is a no-op. **Do not delete or rename existing `.meta` files** — Unity references assets by GUID, and changing one breaks every scene/prefab/asmdef that points at it. Renaming a `.cs` file? Move the corresponding `.meta` file alongside it (do not regenerate).
+
 ## Adding asmdefs
 
 If you add a new opt-in module:
@@ -50,6 +62,7 @@ The console runner is your "did I just break something obvious" check before pus
 
 ## Pull request checklist
 
+- [ ] Every new file under `Runtime/`, `Tests/`, or `Editor/` has a sibling `.meta` file (run `bash scripts/generate-unity-meta.sh`).
 - [ ] `Runtime/` does not import `UnityEngine` or `UnityEditor`.
 - [ ] `Runtime/` does not introduce a new NuGet dependency outside `Runtime/Optional/`.
 - [ ] Public types have XML doc comments.

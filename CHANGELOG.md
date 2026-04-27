@@ -4,6 +4,15 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+### Added
+
+- Unity `.meta` files for every shipped asset (root manifests, `Runtime/`, `Tests/`). Without these, Unity refused to import the package ("immutable folder, asset will be ignored").
+- `scripts/generate-unity-meta.sh` — idempotent generator that creates missing meta files with deterministic, path-derived GUIDs. Documented in `CONTRIBUTING.md`.
+
+### Fixed
+
+- CI/release workflows: bumped `actions/setup-node` to Node 22 LTS (silences the Node 20 deprecation warning) and made `npm pack --pack-destination` resilient to a missing destination directory.
+
 ## [0.1.0-preview.1] — 2026-04-27
 
 Initial pre-release. Repository restructured for Unity UPM consumption alongside the existing .NET solution.
