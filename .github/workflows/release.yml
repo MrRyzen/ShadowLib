@@ -72,19 +72,19 @@ jobs:
 
       # ----- NuGet package -----
       - name: Pack NuGet
-        run: dotnet pack Runtime/ShadowLib.csproj --configuration Release --no-build --output artifacts/nuget
+        run: dotnet pack Runtime/ShadowLib.csproj --configuration Release --no-build --output ./artifacts/nuget
 
       # ----- UPM tarball (npm-pack honours .npmignore + package.json `files`) -----
       - name: Pack UPM tarball
         run: |
-          mkdir -p artifacts/upm
+          mkdir -p ./artifacts/upm
           npm pack --pack-destination ./artifacts/upm
 
       - name: Upload all artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts
-          path: artifacts/
+          path: ./artifacts/
           retention-days: 90
 
       - name: Create GitHub Release
@@ -95,7 +95,7 @@ jobs:
           generate_release_notes: true
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           files: |
-            artifacts/dll/*
-            artifacts/nuget/*.nupkg
-            artifacts/nuget/*.snupkg
-            artifacts/upm/*.tgz
+            ./artifacts/dll/*
+            ./artifacts/nuget/*.nupkg
+            ./artifacts/nuget/*.snupkg
+            ./artifacts/upm/*.tgz

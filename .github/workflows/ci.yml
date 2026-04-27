@@ -58,16 +58,16 @@ jobs:
 
       - name: Pack NuGet
         run: |
-          dotnet pack Runtime/ShadowLib.csproj --configuration Release --output artifacts/nuget
+          dotnet pack Runtime/ShadowLib.csproj --configuration Release --output ./artifacts/nuget
 
       - name: Pack UPM tarball
         run: |
-          mkdir -p artifacts/upm
+          mkdir -p ./artifacts/upm
           npm pack --pack-destination ./artifacts/upm
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: package-dryrun
-          path: artifacts/
+          path: ./artifacts/
           retention-days: 14
