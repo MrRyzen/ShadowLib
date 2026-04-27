@@ -41,6 +41,24 @@ jobs:
           path: TestResults/
           retention-days: 14
 
+  unity-meta-check:
+    name: Unity .meta drift check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run meta generator
+        run: bash scripts/generate-unity-meta.sh
+
+      - name: Fail on uncommitted .meta drift
+        run: |
+          if [ -n "$(git status --porcelain '*.meta')" ]; then
+            echo "::error::generate-unity-meta.sh produced uncommitted .meta changes. Run it locally and commit the result."
+            git status --porcelain '*.meta'
+            git --no-pager diff -- '*.meta' | head -200
+            exit 1
+          fi
+
   package-dryrun:
     name: Pack dry-run (NuGet + UPM)
     runs-on: ubuntu-latest

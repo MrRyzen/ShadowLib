@@ -4,10 +4,18 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+## [0.1.0-preview.2] — 2026-04-27
+
 ### Added
 
 - Unity `.meta` files for every shipped asset (root manifests, `Runtime/`, `Tests/`). Without these, Unity refused to import the package ("immutable folder, asset will be ignored").
 - `scripts/generate-unity-meta.sh` — idempotent generator that creates missing meta files with deterministic, path-derived GUIDs. Documented in `CONTRIBUTING.md`.
+- `scripts/generate-unity-meta.sh`: macOS `md5 -q` fallback when `md5sum` isn't on `PATH`, and optional support for `.uss`, `.uxml`, `.asset`, `.shader`, `.compute` assets.
+- `ci.yml` `unity-meta-check` job: runs the meta generator on every push/PR and fails if it produces uncommitted `.meta` drift.
+
+### Changed
+
+- Converted all 31 `.cs` files from file-scoped to block-scoped namespaces so the library stays compilable on Unity 2021.3 LTS (C# 9, which doesn't support file-scoped namespaces). Public API is unchanged.
 
 ### Fixed
 
@@ -47,5 +55,6 @@ Initial pre-release. Repository restructured for Unity UPM consumption alongside
 - `XorShift128` does not fully implement `IRandom` (legacy).
 - Roadmap items not yet implemented: `EffectWheel`, `SparseGraph<T>`, `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, BSP / WFC / Maze gen.
 
-[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.1...HEAD
+[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.2...HEAD
+[0.1.0-preview.2]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.1...v0.1.0-preview.2
 [0.1.0-preview.1]: https://github.com/MrRyzen/ShadowLib/releases/tag/v0.1.0-preview.1

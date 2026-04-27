@@ -21,9 +21,19 @@ set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel 2>/dev/null || dirname "$0"/..)"
 
+# Pick the available md5 implementation. Linux/CI has md5sum; macOS ships `md5`.
+if command -v md5sum >/dev/null 2>&1; then
+    _md5() { md5sum | awk '{print $1}'; }
+elif command -v md5 >/dev/null 2>&1; then
+    _md5() { md5 -q; }
+else
+    echo "ERROR: neither md5sum nor md5 found on PATH." >&2
+    exit 1
+fi
+
 guid_for() {
     # 32-char hex GUID from the repo-relative asset path.
-    printf '%s' "$1" | md5sum | awk '{print $1}'
+    printf '%s' "$1" | _md5
 }
 
 write_if_missing() {
@@ -93,6 +103,54 @@ TextScriptImporter:
 "
 }
 
+# .asset (ScriptableObject / serialized native asset)
+asset_meta() {
+    local path="$1"
+    local guid; guid=$(guid_for "$path")
+    write_if_missing "${path}.meta" "fileFormatVersion: 2
+guid: ${guid}
+NativeFormatImporter:
+  externalObjects: {}
+  mainObjectFileID: 11400000
+  userData:
+  assetBundleName:
+  assetBundleVariant:
+"
+}
+
+# .shader
+shader_meta() {
+    local path="$1"
+    local guid; guid=$(guid_for "$path")
+    write_if_missing "${path}.meta" "fileFormatVersion: 2
+guid: ${guid}
+ShaderImporter:
+  externalObjects: {}
+  defaultTextures: []
+  nonModifiableTextures: []
+  preprocessorOverride: 0
+  userData:
+  assetBundleName:
+  assetBundleVariant:
+"
+}
+
+# .compute
+compute_meta() {
+    local path="$1"
+    local guid; guid=$(guid_for "$path")
+    write_if_missing "${path}.meta" "fileFormatVersion: 2
+guid: ${guid}
+ComputeShaderImporter:
+  externalObjects: {}
+  currentAPIMask: 0
+  preprocessorOverride: 0
+  userData:
+  assetBundleName:
+  assetBundleVariant:
+"
+}
+
 echo "Generating Unity .meta files (idempotent)…"
 
 # ---------- Root-level assets Unity scans inside an installed package ----------
@@ -129,7 +187,10 @@ for root in Runtime Tests Editor; do
         case "$file" in
             *.cs)      script_meta "$file" ;;
             *.asmdef)  asmdef_meta "$file" ;;
-            *.json|*.md|*.txt|*.xml) text_meta "$file" ;;
+            *.json|*.md|*.txt|*.xml|*.uss|*.uxml) text_meta "$file" ;;
+            *.asset)   asset_meta   "$file" ;;
+            *.shader)  shader_meta  "$file" ;;
+            *.compute) compute_meta "$file" ;;
             *.meta)    : ;;  # don't meta a meta
             *)         : ;;  # ignore everything else
         esac
