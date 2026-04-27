@@ -1,0 +1,34 @@
+# What npm pack INCLUDES is controlled by what isn't excluded here. The result
+# is the UPM tarball Unity consumes. The .NET solution + tooling are not part
+# of the package itself — only the Unity-relevant folders + docs.
+
+# .NET solution & tooling
+ShadowLib.sln
+ShadowLib.Runner/
+Runtime/bin/
+Runtime/obj/
+Runtime/**/*.csproj
+Tests/**/*.csproj
+Tests/Runtime/bin/
+Tests/Runtime/obj/
+
+# CI/CD plumbing
+.github/
+
+# Repo-only docs (Unity surfaces README, CHANGELOG, LICENSE only)
+CONTRIBUTING.md
+USAGE_GUIDE.md
+CLAUDE.md
+SHADOWLIB_ROADMAP.md
+
+# Memory / IDE / OS
+.vs/
+.vscode/
+.idea/
+.git/
+.gitignore
+.DS_Store
+Thumbs.db
+*.tgz
+artifacts/
+TestResults/

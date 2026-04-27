@@ -1,0 +1,34 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShadowLib", "Runtime\ShadowLib.csproj", "{C6414126-C8E5-4741-A94C-8FA894A6C8BD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShadowLib.Runner", "ShadowLib.Runner\ShadowLib.Runner.csproj", "{5FA5953A-185E-4D80-B5F7-0D91F944F016}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ShadowLib.Tests", "Tests\Runtime\ShadowLib.Tests.csproj", "{8B7C9E2A-1F4D-4E62-9A5B-3C8E7F1A4D2E}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C6414126-C8E5-4741-A94C-8FA894A6C8BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C6414126-C8E5-4741-A94C-8FA894A6C8BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6414126-C8E5-4741-A94C-8FA894A6C8BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C6414126-C8E5-4741-A94C-8FA894A6C8BD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5FA5953A-185E-4D80-B5F7-0D91F944F016}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5FA5953A-185E-4D80-B5F7-0D91F944F016}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5FA5953A-185E-4D80-B5F7-0D91F944F016}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5FA5953A-185E-4D80-B5F7-0D91F944F016}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B7C9E2A-1F4D-4E62-9A5B-3C8E7F1A4D2E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B7C9E2A-1F4D-4E62-9A5B-3C8E7F1A4D2E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B7C9E2A-1F4D-4E62-9A5B-3C8E7F1A4D2E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B7C9E2A-1F4D-4E62-9A5B-3C8E7F1A4D2E}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

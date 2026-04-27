@@ -1,0 +1,133 @@
+# =====================================================================
+# .NET / C#
+# =====================================================================
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+
+# .NET artifact outputs
+*.dll
+*.exe
+*.pdb
+*.cache
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Restore / publish / pack
+project.lock.json
+project.fragment.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+
+# Roslyn analyzer cache
+.idea_modules/
+*.GeneratedMSBuildEditorConfig.editorconfig
+
+# But DO ship our pipeline-produced packages out of /artifacts when published intentionally.
+
+# =====================================================================
+# IDE — Visual Studio
+# =====================================================================
+.vs/
+*.opendb
+*.VisualState.xml
+*.vsidx
+*.lock
+*.tmp_proj
+*_wpftmp.csproj
+*.tlb
+*.tlh
+
+# =====================================================================
+# IDE — Rider / JetBrains
+# =====================================================================
+.idea/
+*.sln.iml
+*.iml
+.idea_modules/
+
+# =====================================================================
+# IDE — VS Code
+# =====================================================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# =====================================================================
+# Unity (when this package is opened inside / alongside a Unity project)
+# =====================================================================
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Mm]emoryCaptures/
+[Uu]ser[Ss]ettings/
+
+# Unity asset/import metadata is required at the package root for asmdefs and
+# samples to be recognised, BUT not in /Library or /Temp scratch dirs (covered
+# above). Per Unity guidance, .meta files for committed assets should be
+# tracked. They are NOT ignored here.
+
+# Generated Unity project files — these are derived from .asmdef + Library/
+*.csproj.user
+*.unityproj
+*.sln.DotSettings*
+sysinfo.txt
+*.pidb.meta
+*.pdb.meta
+*.mdb.meta
+
+# Unity package tarballs from local pack
+*.tgz
+
+# Crashes
+crashlytics-build.properties
+*.stackdump
+
+# =====================================================================
+# OS
+# =====================================================================
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =====================================================================
+# Tooling / local
+# =====================================================================
+.env
+.env.local
+*.local
+node_modules/
+coverage/
+TestResults/
+*.trx
+*.coverage
+*.coveragexml

@@ -1,0 +1,16 @@
+{
+    "name": "ShadowLib.Samples.BasicUsage",
+    "rootNamespace": "ShadowLib.Samples",
+    "references": [
+        "ShadowLib"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

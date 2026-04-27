@@ -1,0 +1,101 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'   # pre-release tags like v0.1.0-preview.1
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 0.2.0 or 0.2.0-preview.1)'
+        required: true
+
+permissions:
+  contents: write     # required to create GitHub releases
+
+jobs:
+  release:
+    name: Build, pack & publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Setup Node (for npm pack of UPM tarball)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${GITHUB_REF_NAME#v}"
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          # Verify package.json and ShadowLib.csproj agree with the tag.
+          PKG_VER=$(node -p "require('./package.json').version")
+          CSPROJ_VER=$(grep -oPm1 '(?<=<Version>)[^<]+' Runtime/ShadowLib.csproj)
+          echo "Tag/input version : $VER"
+          echo "package.json      : $PKG_VER"
+          echo "ShadowLib.csproj  : $CSPROJ_VER"
+          if [ "$VER" != "$PKG_VER" ] || [ "$VER" != "$CSPROJ_VER" ]; then
+            echo "::error::Version mismatch between tag, package.json and Runtime/ShadowLib.csproj — bump them together."
+            exit 1
+          fi
+
+      - name: Restore
+        run: dotnet restore ShadowLib.sln
+
+      - name: Build (Release)
+        run: dotnet build ShadowLib.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test ShadowLib.sln --configuration Release --no-build
+
+      # ----- Compiled DLL artifact -----
+      - name: Publish DLL
+        run: |
+          mkdir -p artifacts/dll
+          cp Runtime/bin/Release/netstandard2.1/ShadowLib.dll artifacts/dll/
+          cp Runtime/bin/Release/netstandard2.1/ShadowLib.xml artifacts/dll/ || true
+          cp Runtime/bin/Release/netstandard2.1/ShadowLib.pdb artifacts/dll/ || true
+
+      # ----- NuGet package -----
+      - name: Pack NuGet
+        run: dotnet pack Runtime/ShadowLib.csproj --configuration Release --no-build --output artifacts/nuget
+
+      # ----- UPM tarball (npm-pack honours .npmignore + package.json `files`) -----
+      - name: Pack UPM tarball
+        run: |
+          mkdir -p artifacts/upm
+          npm pack --pack-destination artifacts/upm
+
+      - name: Upload all artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: artifacts/
+          retention-days: 90
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          files: |
+            artifacts/dll/*
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/*.snupkg
+            artifacts/upm/*.tgz
