@@ -54,7 +54,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Pack NuGet
         run: |
@@ -62,7 +62,8 @@ jobs:
 
       - name: Pack UPM tarball
         run: |
-          npm pack --pack-destination artifacts/upm
+          mkdir -p artifacts/upm
+          npm pack --pack-destination ./artifacts/upm
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
