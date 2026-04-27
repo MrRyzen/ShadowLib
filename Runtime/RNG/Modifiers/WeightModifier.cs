@@ -49,7 +49,7 @@ namespace ShadowLib.RNG.Modifiers
         /// <summary>
         /// The stage at which this modifier should be applied. This allows for ordering modifiers when multiple modifiers are applied to the same distribution. Modifiers with lower stage values will be applied before those with higher stage values. For example, you might want to apply certain global modifiers at stage 0, and then more specific item modifiers at stage 1, and finally temporary buffs/debuffs at stage 2. The default value is 999, which means it will be applied after any modifiers with a specified stage less than 999.
         /// </summary>
-        public int Stage { get; set; } = 999; // Default to last stage if not specified
+        public int Stage { get; set; }
 
         /// <summary>
         /// Initializes a new instance of the WeightModifier struct with the specified parameters.
