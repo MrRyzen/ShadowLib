@@ -4,6 +4,17 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+## [0.1.0-preview.4] — 2026-07-25
+
+### Added
+
+- `MarkovChain<T>` (`ShadowLib.RNG.Distributions`) — first-order weighted Markov chain. Transitions accumulate via `AddTransition` / `AddSequence`, then compile into a flat CSR layout with per-row alias tables (Vose's method) so `Next` / `TryNext` / `Walk` are O(1) per step and allocation-free. Deterministic given the same build sequence and `IRandom`.
+- `MarkovWordGenerator` (`ShadowLib.Procedural`) — character-level order-N Markov word generation for procedural naming (companies, products, people). Trains on word lists with `^`/`$` start/end markers, generates length-bounded words with bounded retry, and offers an allocation-free `TryGenerate(Span<char>)` alongside a convenience `Generate`. Built on `MarkovChain<string>`.
+
+### Fixed
+
+- Documentation samples corrected to match the actual API: `DynamicWeightTable.UpdateWeight` → `SetWeight`, `RandomBag.Draw` → `Sample`, `FieldGrid` indexer/`GetRowSpan` → `Set`/`GetRowMutable`, `AliasTable` tuple-array constructor → `(items, weights)` lists, `BinPacker.AllFits` buffer signature, `TryPlace` nullable-position return, `AutoSort` returns *placed* (not unplaced) items, `TieredTable.Sample` parameter name `drops`, and a nonexistent `IRandom.Range(uint, uint)` mention.
+
 ## [0.1.0-preview.3] — 2026-04-27
 
 ### Fixed
@@ -66,7 +77,8 @@ Initial pre-release. Repository restructured for Unity UPM consumption alongside
 - `XorShift128` does not fully implement `IRandom` (legacy).
 - Roadmap items not yet implemented: `EffectWheel`, `SparseGraph<T>`, `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, BSP / WFC / Maze gen.
 
-[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.3...HEAD
+[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.4...HEAD
+[0.1.0-preview.4]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.3...v0.1.0-preview.4
 [0.1.0-preview.3]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.2...v0.1.0-preview.3
 [0.1.0-preview.2]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.1...v0.1.0-preview.2
 [0.1.0-preview.1]: https://github.com/MrRyzen/ShadowLib/releases/tag/v0.1.0-preview.1

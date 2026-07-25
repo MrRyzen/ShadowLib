@@ -1,13 +1,13 @@
 # ShadowLib
 
-> **Pre-release — `0.1.0-preview.3`.** Public API may break before `1.0.0`. Pin a specific Git tag or version when consuming.
+> **Pre-release — `0.1.0-preview.4`.** Public API may break before `1.0.0`. Pin a specific Git tag or version when consuming.
 
 ShadowLib is a deterministic-RNG and procedural-generation toolkit for games. It is plain C# targeting **`netstandard2.1`** — usable in Unity (2021.3 LTS+) and in any non-Unity .NET project.
 
 ```
-RNG        deterministic streams, seeding, weighted/tiered/alias tables, dice, simplex noise
+RNG        deterministic streams, seeding, weighted/tiered/alias tables, dice, Markov chains, simplex noise
 Spatial    Grid2D, FieldGrid, Polyomino, ICell/ISpace contracts
-Procedural BinPacker (FirstFit / BestFit / BottomLeft / AutoSort)
+Procedural BinPacker (FirstFit / BestFit / BottomLeft / AutoSort), Markov name generation
 Optional   NCalc-driven weight modifiers and JSON modifier loading (opt-in)
 ```
 
@@ -28,7 +28,7 @@ https://github.com/MrRyzen/ShadowLib.git
 To pin a release:
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.3
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.4
 ```
 
 ### 2. Unity — Local package path
@@ -79,7 +79,7 @@ var loot = new TieredTable<string>();
 loot.AddTier(1, new (string, float)[] { ("Sword", 20f), ("Vest", 20f), ("Potion", 25f) });
 loot.AddTier(2, new (string, float)[] { ("Cleaver", 5f), ("Plate", 10f) });
 
-string[] drops = loot.Sample(lootRng, tier: 1, count: 3).ToArray();
+string[] drops = loot.Sample(lootRng, tier: 1, drops: 3);
 ```
 
 For more, see [`USAGE_GUIDE.md`](./USAGE_GUIDE.md).

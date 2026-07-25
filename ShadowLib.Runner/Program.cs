@@ -58,6 +58,38 @@ namespace ShadowLib.Runner
                 Console.WriteLine(item);
             }
 
+            var weather = new MarkovChain<string>();
+            weather.AddTransition("Sunny", "Sunny", 0.7f);
+            weather.AddTransition("Sunny", "Cloudy", 0.3f);
+            weather.AddTransition("Cloudy", "Sunny", 0.4f);
+            weather.AddTransition("Cloudy", "Rainy", 0.4f);
+            weather.AddTransition("Cloudy", "Cloudy", 0.2f);
+            weather.AddTransition("Rainy", "Cloudy", 0.6f);
+            weather.AddTransition("Rainy", "Rainy", 0.4f);
+            weather.Build();
+
+            var weatherRng = Orchestrator.CreateRNG("weather");
+            var forecast = new string[7];
+            int days = weather.Walk("Sunny", weatherRng, forecast);
+            Console.WriteLine($"\nMarkov weather forecast: {string.Join(" -> ", forecast[..days])}");
+
+            var companyGen = new MarkovWordGenerator(order: 2);
+            companyGen.Train([
+                "Novartis", "Raytheon", "Blackstone", "Palantir", "Salesforce",
+                "Lockheed", "Theranos", "Northrop", "Medtronic", "Crowdstrike"
+            ]);
+            companyGen.Build();
+
+            string[] suffixes = ["Inc.", "Corp.", "LLC", "Group", "Holdings", "Industries", "Systems", "Technologies"];
+            var nameRng = Orchestrator.CreateRNG("company-names");
+            Console.WriteLine("\nMarkov-generated companies:");
+            for (int i = 0; i < 5; i++)
+            {
+                string word = companyGen.Generate(nameRng, minLength: 4, maxLength: 10);
+                string company = char.ToUpperInvariant(word[0]) + word.Substring(1).ToLowerInvariant();
+                Console.WriteLine($"  {company} {suffixes[nameRng.Range(0, suffixes.Length)]}");
+            }
+
             Grid2D<Cell<Item>, Item> grid = new(
                 width: rng.Range(5, 50),
                 height: rng.Range(5, 50),

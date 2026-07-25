@@ -15,7 +15,7 @@ This document is the canonical reference for using ShadowLib. It is written for 
 | `ShadowLib.RNG.Noise` | Simplex noise for terrain, density fields, fBm-textured maps. |
 | `ShadowLib.RNG.Utilities.ScalingCurve` | Level-driven progression curves (XP, damage scaling, drop weights). |
 | `ShadowLib.Spatial` | 2D grids, scalar fields, polyomino shapes. |
-| `ShadowLib.Procedural` | Algorithms that operate on `ISpace` — currently bin-packing. |
+| `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation. |
 | `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc-driven dynamic weight modifiers + JSON-loaded modifier files. |
 
 If you can't decide between modules, follow the dependency arrow: most things ultimately consume an `IRandom`, which comes from the **`Orchestrator`**. Start there.
@@ -29,7 +29,7 @@ If you can't decide between modules, follow the dependency arrow: most things ul
 `Window → Package Manager → + → Add package from git URL…`
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.3
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.4
 ```
 
 Always pin a tag — `main` will move under you.
@@ -145,7 +145,7 @@ byte[] s  = rng.GetState();            // checkpoint
 rng.SetState(s);                       // restore
 ```
 
-All `Range(int, int)` / `Range(uint, uint)` / `Range(ulong, ulong)` use **rejection sampling** — they're bias-free across the full numeric range. Don't replace them with `rng.NextInt() % n`.
+All `Range(int, int)` / `Range(ulong, ulong)` use **rejection sampling** — they're bias-free across the full numeric range. Don't replace them with `rng.NextInt() % n`.
 
 ### `Xoshiro128StarStar` (preferred)
 
@@ -171,7 +171,7 @@ table.Add("Rare",      weight: 5f);
 
 string drop = table.Sample(rng);
 
-table.UpdateWeight("Rare", 50f);     // boosted by some buff
+table.SetWeight("Rare", 50f);        // boosted by some buff (base weight untouched)
 string better = table.Sample(rng);
 
 table.ResetWeights();                // back to original base weights
@@ -184,9 +184,9 @@ Maintains a **base** and **current** weight per entry. `ResetWeights()` restores
 When the distribution is fixed at build time and you sample millions of times (loot tables, biome distributions, NPC name pools).
 
 ```csharp
-var alias = new AliasTable<string>(new (string, float)[] {
-    ("Forest", 50f), ("Plains", 30f), ("Desert", 15f), ("Tundra", 5f)
-});
+var alias = new AliasTable<string>(
+    items:   new[] { "Forest", "Plains", "Desert", "Tundra" },
+    weights: new[] { 50f, 30f, 15f, 5f });
 string biome = alias.Sample(rng);   // O(1)
 ```
 
@@ -205,7 +205,7 @@ string[] firstChest  = loot.Sample(rng, tier: 1, drops: 3);
 string[] bossChest   = loot.Sample(rng, tier: 2, drops: 2);
 ```
 
-Each tier is a `DynamicWeightTable<T>` under the hood — apply per-tier modifiers via `loot.GetTier(tier).UpdateWeight(...)`.
+Each tier is a `DynamicWeightTable<T>` under the hood — apply per-tier modifiers via `loot.GetTier(tier).SetWeight(...)`.
 
 ### `RandomBag<T>` — draw without replacement
 
@@ -213,7 +213,8 @@ Tetris-style "shuffle the whole bag, then deal one piece at a time".
 
 ```csharp
 var bag = new RandomBag<string>(new[] { "I", "O", "T", "S", "Z", "L", "J" }, rng);
-string next = bag.Draw();   // each piece appears exactly once before any repeats
+string next = bag.Sample();   // each piece appears exactly once before any repeats
+string peek = bag.Peek();     // look without removing; bag.HasNext / bag.Count to check state
 ```
 
 ### `Dice<T>` — N-sided die with mappable faces
@@ -225,6 +226,36 @@ string roll = loot.Sample();
 ```
 
 Throws on empty face arrays.
+
+### `MarkovChain<T>` — weighted state transitions
+
+For state sequences where the next state depends on the current one: weather systems, AI behavior drift, procedural name/text generation.
+
+```csharp
+var weather = new MarkovChain<string>();
+weather.AddTransition("Sunny", "Sunny", 0.7f);
+weather.AddTransition("Sunny", "Cloudy", 0.3f);
+weather.AddTransition("Cloudy", "Rainy", 0.5f);
+weather.AddTransition("Cloudy", "Sunny", 0.5f);
+weather.AddTransition("Rainy", "Cloudy", 1f);
+weather.Build();                                   // optional — compiles lazily otherwise
+
+string tomorrow = weather.Next("Sunny", rng);       // O(1), zero-alloc
+if (weather.TryNext(state, rng, out var next)) { }  // false for terminal/unknown states
+
+var forecast = new string[7];
+int days = weather.Walk("Sunny", rng, forecast);    // fills span, stops at terminal states
+```
+
+Training from observed sequences (each adjacent pair accumulates weight):
+
+```csharp
+var names = new MarkovChain<char>();
+names.AddSequence("kael".AsSpan());
+names.AddSequence("karn".AsSpan());
+```
+
+Internally compiles to a flat CSR layout with per-row alias tables (Vose's method) — stepping is O(1) regardless of how many transitions a state has, and allocation-free. Mutating after a build marks it dirty; the next step recompiles. Call `Build()` at load time to keep gameplay frames allocation-free. First-order only — for order-N, use a composite state type (e.g. a struct holding the last N states).
 
 ---
 
@@ -332,10 +363,10 @@ When each cell is "just a number" (density, heat, influence). No occupancy index
 
 ```csharp
 var density = new FieldGrid<float>(width: 64, height: 64, cellSize: 1f);
-density[10, 5] = 0.8f;
-ref float cell = ref density.GetRef(10, 5);  // mutate in place
+density.Set(10, 5, 0.8f);
+ref float cell = ref density.GetRef(10, 5);   // mutate in place
 density.Fill(0f);
-Span<float> row = density.GetRowSpan(5);     // mutable span over a single row
+Span<float> row = density.GetRowMutable(5);   // mutable span over a single row
 ```
 
 ### `ICell<T>` / `ISpace<T>`
@@ -357,20 +388,68 @@ var packer = new BinPacker<MyItem>(grid);
 var pos1 = packer.FirstFit(shape);     // top-left scan, fastest
 var pos2 = packer.BestFit(shape);      // tightest neighbour-contact score
 var pos3 = packer.BottomLeft(shape);   // gravity-style
-var all  = packer.AllFits(shape);      // every valid position
 
-// One-shot place
-bool ok = packer.TryPlace(item, shape);
+// Every valid position, written into a caller-owned buffer (returns the count)
+Span<(int col, int row)> fits = stackalloc (int, int)[64];
+int found = packer.AllFits(shape, fits);
+
+// One-shot place — returns the anchor position, or null when it didn't fit
+var placedAt = packer.TryPlace(item, shape);
 
 // Sort items by decreasing footprint and pack greedily
-var unplaced = packer.AutoSort(new (MyItem item, Polyomino shape)[] {
+var placed = packer.AutoSort(new (MyItem item, Polyomino shape)[] {
     (sword,  Polyomino.FromRect(1, 2)),
     (vest,   Polyomino.FromRect(2, 2)),
     (potion, Polyomino.FromRect(1, 1)),
 });
 ```
 
-`AutoSort` returns the items it could **not** place; an empty result means everything fit.
+`AutoSort` frees and repacks everything, returning the successfully placed items with their new positions — anything missing from the result did **not** fit.
+
+### `MarkovWordGenerator` — character-level name generation
+
+For procedural naming (companies, products, people): trains an order-N character Markov chain on curated word lists, then generates new words that resemble — but don't copy — the training data.
+
+```csharp
+var gen = new MarkovWordGenerator(order: 2);   // next char predicted from the previous 2
+gen.Train(new[] {
+    "Novartis", "Raytheon", "Blackstone", "Palantir", "Salesforce",
+    "Lockheed", "Theranos", "Northrop", "Medtronic", "Crowdstrike"
+});
+gen.Build();                                    // optional — compiles lazily otherwise
+
+string word = gen.Generate(rng, minLength: 4, maxLength: 10);
+// e.g. "Raytheonic", "Lockstrop", "Blanos"
+
+// Allocation-free variant for hot paths — caller owns the buffer
+Span<char> buffer = stackalloc char[10];
+if (gen.TryGenerate(rng, buffer, out int length, minLength: 4, maxAttempts: 50))
+    UseName(buffer.Slice(0, length));
+```
+
+Training words are padded with `^` (start) and `$` (end) markers internally; each attempt walks the chain from the start state and restarts if it ends outside the length bounds or dead-ends, up to `maxAttempts`. `Generate` throws when attempts are exhausted; `TryGenerate` returns `false` so you can fall back to an authored name.
+
+The generator only produces raw words. Composition (suffixes like "Inc.", sector vocabulary, patterns), duplicate prevention, and content validation are game-side concerns — run each candidate through your own checks and retry:
+
+```csharp
+string name;
+do { name = gen.Generate(companyNameRng); }
+while (usedNames.Contains(Normalize(name)));
+```
+
+Case is preserved from training data. Use separate generator instances per category (company names, first names, last names) — each with its own training list and `IRandom` stream.
+
+Loading training lists is deliberately your concern — the library takes strings, not file paths, so it works the same on desktop, Android, and WebGL:
+
+```csharp
+// Plain .NET — one word per line in a .txt file
+gen.Train(File.ReadAllLines("company_prefixes.txt"));
+
+// Unity — ship the list as a TextAsset
+gen.Train(listAsset.text.Split('\n')
+    .Select(w => w.Trim())          // strips \r on Windows-authored files
+    .Where(w => w.Length > 0));     // Train rejects empty words
+```
 
 ---
 
@@ -449,6 +528,8 @@ Read this section before generating ShadowLib code.
    - Stratified by tier/rarity → `TieredTable<T>`.
    - Each item exactly once before repeats → `RandomBag<T>`.
    - Mappable faces with equal weight → `Dice<T>`.
+   - Next state depends on current state → `MarkovChain<T>`.
+   - Generated names/words from example lists → `MarkovWordGenerator` (in `ShadowLib.Procedural`).
 3. **Need a 2D grid?**
    - With occupants and shapes → `Grid2D<TCell, TOccupant>`.
    - Just scalar values → `FieldGrid<T>`.
@@ -464,7 +545,7 @@ Read this section before generating ShadowLib code.
 
 ### Do not hallucinate these
 
-The following do **not** exist (as of `0.1.0-preview.3`):
+The following do **not** exist (as of `0.1.0-preview.4`):
 
 - `UUID.V4()` / `UUID.V5()` — the methods are `GenerateRandomUUID()` and `GenerateDeterministicUUID(ulong seed, ulong context)`.
 - `Orchestrator.GetRng(string)` — it's `CreateRNG(string)`, which both creates and caches.

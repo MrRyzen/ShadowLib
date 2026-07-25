@@ -20,6 +20,7 @@
 - **`TieredTable<T>`** — Tier-keyed collection of `DynamicWeightTable<T>` instances for level/rarity-gated loot.
 - **`RandomBag<T>`** — Shuffled draw-without-replacement bag.
 - **`Dice<T>`** — Generic N-sided dice with mappable face values.
+- **`MarkovChain<T>`** — First-order weighted Markov chain. Mutable build phase (`AddTransition` / `AddSequence`), compiled to flat CSR + per-row alias tables (Vose) for O(1), zero-alloc stepping (`Next` / `TryNext` / `Walk`).
 
 ### RNG Utilities
 
@@ -56,6 +57,7 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ### Procedural
 
 - **`BinPacker<TOccupant>`** — Polyomino bin packing on any `ISpace`. Strategies: FirstFit, BestFit (neighbor-contact scoring), BottomLeft. Includes `TryPlace`, `CanFit`, `AllFits`, and `AutoSort` (repack by decreasing size).
+- **`MarkovWordGenerator`** — Character-level order-N Markov word generation for procedural naming. `^`/`$` start/end markers, min/max length bounds, bounded retry, allocation-free `TryGenerate(Span<char>)`. Built on `MarkovChain<string>` k-gram states.
 
 ---
 
@@ -172,3 +174,5 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 13 | `Spaced Placement` | — | Low | Pending |
 | 14 | `Cellular Automata` | `FieldGrid` | Medium | Pending |
 | 15 | BSP, WFC, Maze Gen | — | High | Pending |
+| 16 | `MarkovChain<T>` | `IRandom` | Medium | **Done** |
+| 17 | `MarkovWordGenerator` | `MarkovChain` | Low | **Done** |
