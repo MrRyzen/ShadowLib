@@ -18,7 +18,7 @@
 - **`DynamicWeightTable<T>`** — Mutable weighted sampling with base/dynamic weight split, binary search selection, bulk operations (normalize, uniform, reset).
 - **`AliasTable<T>`** — O(1) weighted sampling via alias method. Immutable after construction.
 - **`TieredTable<T>`** — Tier-keyed collection of `DynamicWeightTable<T>` instances for level/rarity-gated loot.
-- **`RandomBag<T>`** — Shuffled draw-without-replacement bag.
+- **`RandomBag<T>`** — Shuffled draw-without-replacement bag with cycle-based auto-refill (opt-out) and manual `Refill()`.
 - **`Dice<T>`** — Generic N-sided dice with mappable face values.
 - **`MarkovChain<T>`** — First-order weighted Markov chain. Mutable build phase (`AddTransition` / `AddSequence`), compiled to flat CSR + per-row alias tables (Vose) for O(1), zero-alloc stepping (`Next` / `TryNext` / `Walk`).
 

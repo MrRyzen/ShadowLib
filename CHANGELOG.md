@@ -4,6 +4,16 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+## [0.1.0-preview.5] — 2026-07-25
+
+### Added
+
+- `RandomBag<T>.Refill()` — discards the current cycle and reshuffles the bag's full contents, and an `autoRefill` constructor parameter (default `true`).
+
+### Changed
+
+- **Behavior change:** `RandomBag<T>` now auto-refills by default — exhausting a cycle reshuffles all items and continues (Tetris 7-bag semantics), matching what the documentation already described. The previous drain-once-then-throw behavior is available via `new RandomBag<T>(items, rng, autoRefill: false)`. `HasNext` now reports `true` whenever a refill is available.
+
 ## [0.1.0-preview.4] — 2026-07-25
 
 ### Added
@@ -77,7 +87,8 @@ Initial pre-release. Repository restructured for Unity UPM consumption alongside
 - `XorShift128` does not fully implement `IRandom` (legacy).
 - Roadmap items not yet implemented: `EffectWheel`, `SparseGraph<T>`, `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, BSP / WFC / Maze gen.
 
-[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.4...HEAD
+[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.5...HEAD
+[0.1.0-preview.5]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.4...v0.1.0-preview.5
 [0.1.0-preview.4]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.3...v0.1.0-preview.4
 [0.1.0-preview.3]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.2...v0.1.0-preview.3
 [0.1.0-preview.2]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.1...v0.1.0-preview.2

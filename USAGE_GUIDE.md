@@ -29,7 +29,7 @@ If you can't decide between modules, follow the dependency arrow: most things ul
 `Window → Package Manager → + → Add package from git URL…`
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.4
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.5
 ```
 
 Always pin a tag — `main` will move under you.
@@ -209,13 +209,15 @@ Each tier is a `DynamicWeightTable<T>` under the hood — apply per-tier modifie
 
 ### `RandomBag<T>` — draw without replacement
 
-Tetris-style "shuffle the whole bag, then deal one piece at a time".
+Tetris-style "shuffle the whole bag, then deal one piece at a time". When a cycle is exhausted the bag reshuffles its full contents and starts a new one, so every item appears exactly once per cycle and the bag never runs dry.
 
 ```csharp
 var bag = new RandomBag<string>(new[] { "I", "O", "T", "S", "Z", "L", "J" }, rng);
 string next = bag.Sample();   // each piece appears exactly once before any repeats
 string peek = bag.Peek();     // look without removing; bag.HasNext / bag.Count to check state
 ```
+
+To drain the bag once and throw when empty instead, pass `autoRefill: false`; `bag.Refill()` restarts a drained bag manually either way. `Add(item)` joins both the current cycle and every future refill.
 
 ### `Dice<T>` — N-sided die with mappable faces
 
@@ -545,7 +547,7 @@ Read this section before generating ShadowLib code.
 
 ### Do not hallucinate these
 
-The following do **not** exist (as of `0.1.0-preview.4`):
+The following do **not** exist (as of `0.1.0-preview.5`):
 
 - `UUID.V4()` / `UUID.V5()` — the methods are `GenerateRandomUUID()` and `GenerateDeterministicUUID(ulong seed, ulong context)`.
 - `Orchestrator.GetRng(string)` — it's `CreateRNG(string)`, which both creates and caches.
