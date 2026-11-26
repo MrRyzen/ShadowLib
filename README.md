@@ -189,7 +189,7 @@ CI (`.github/workflows/ci.yml`) runs build+test on every push/PR. Release (`.git
   2. The scripting define `SHADOWLIB_NCALC` set in `Project Settings → Player → Scripting Define Symbols`.
   Without these, the optional module is silently excluded from compilation. The core RNG/Spatial/Procedural modules work without any of this.
 - **Burst compatibility is checked by hand, not by CI.** `Xoshiro128` was verified under Burst 2.0.0 (Unity 6000.6) to match managed output bit for bit in the default and `Deterministic` float modes. Under `FloatMode.Fast`, `Range(float, float)` and `Range(double, double)` drift in the low bits; integer draws stay exact. IL2CPP player builds are unchecked. See the usage guide.
-- **Roadmap items not yet implemented**: see [`SHADOWLIB_ROADMAP.md`](./SHADOWLIB_ROADMAP.md). A* on `Grid2D`, polyomino generator, random walk, spaced placement, cellular automata, BSP/WFC/Maze gen are pending.
+- **Roadmap items not yet implemented**: see [`SHADOWLIB_ROADMAP.md`](./SHADOWLIB_ROADMAP.md). A* on `Grid2D`, random walk, spaced placement, cellular automata, BSP/WFC/Maze gen are pending.
 - **`CanOccupyCell` is O(w·h)** for region checks — fine for typical inventory grids, slow for huge worlds with large footprints. A bitmask-based fast path is on the roadmap.
 
 ---

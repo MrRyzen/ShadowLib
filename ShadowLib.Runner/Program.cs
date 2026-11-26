@@ -153,7 +153,7 @@ namespace ShadowLib.Runner
             var crate = new SpatialGraph3D<string>(width: 2, height: 2, layers: 3);
             crate.AddPocket(Polycube.FromBox(2, 2, 3), 0, 0, 0);
             crate.Place(0, 0, 0, "Lump", lump);
-            Console.WriteLine($"Generated polycube: {lump.CellCount} cells, {lump.Width}x{lump.Height}x{lump.Depth}, fits its 2x2x3 crate: {crate.Contains("Lump")}");
+            Console.WriteLine($"\nGenerated polycube: {lump.CellCount} cells, {lump.Width}x{lump.Height}x{lump.Depth}, fits its 2x2x3 crate: {crate.Contains("Lump")}");
 
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);

@@ -463,7 +463,7 @@ var pouch = Polyomino.Generate(rng, cellCount: 8,  compactness: 0.2f, maxWidth: 
 var lump  = Polycube.Generate(rng, cellCount: 10, compactness: 0.7f, maxWidth: 4, maxHeight: 4, maxDepth: 2);
 ```
 
-- The shape grows one cell at a time from a single cell; every cell shares an edge (2D) or a face (3D) with the rest.
+- The shape grows one cell at a time from a single cell; every cell shares an edge (2D) or a face (3D) with the rest. `Offsets` lists the cells in the order they were grown.
 - `compactness` runs 0 to 1: 0 prefers spots touching one cell (thin, sprawling), 0.5 treats all spots equally, 1 prefers spots touching many cells (dense, blocky).
 - The `max` limits cap the bounding box, so a shape always fits a container of that size. `maxDepth: 1` gives a flat `Polycube`. Asking for more cells than the limits hold throws.
 - Exactly `cellCount - 1` `rng.NextFloat()` draws. Same generator state and arguments give the same shape on every platform.

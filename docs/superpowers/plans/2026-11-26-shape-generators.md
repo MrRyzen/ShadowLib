@@ -8,6 +8,8 @@
 
 **Tech Stack:** C# on `netstandard2.1`, NUnit, `IRandom`.
 
+**Superseded in part:** the weight rule, the `neighbourMax` parameter and float tables described below were changed during the build; the spec has the final rule.
+
 **Spec:** `docs/superpowers/specs/2026-11-26-shape-generators-design.md`
 
 ## Global Constraints

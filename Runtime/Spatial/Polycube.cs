@@ -77,7 +77,11 @@ namespace ShadowLib.Spatial
                 throw new ArgumentException("At least one offset is required.", nameof(offsets));
 
             RequireDistinct(offsets, nameof(offsets));
+            return Normalize(offsets);
+        }
 
+        private static Polycube Normalize((int Col, int Row, int Layer)[] offsets)
+        {
             var min = offsets[0];
             var max = offsets[0];
             for (int i = 1; i < offsets.Length; i++)
@@ -127,13 +131,14 @@ namespace ShadowLib.Spatial
         /// <summary>
         /// Grows a random face-connected shape one cell at a time. Makes exactly
         /// <paramref name="cellCount"/> - 1 <see cref="IRandom.NextFloat"/> draws.
+        /// <see cref="Offsets"/> lists the cells in the order they were grown.
         /// </summary>
         /// <param name="rng">The random source.</param>
         /// <param name="cellCount">How many cells the shape has. Must be greater than zero.</param>
         /// <param name="compactness">0 grows thin, sprawling shapes; 1 grows dense, blocky ones.</param>
-        /// <param name="maxWidth">Largest allowed bounding-box width.</param>
-        /// <param name="maxHeight">Largest allowed bounding-box height.</param>
-        /// <param name="maxDepth">Largest allowed bounding-box depth.</param>
+        /// <param name="maxWidth">Largest allowed bounding-box width. Must be greater than zero; the default is no limit.</param>
+        /// <param name="maxHeight">Largest allowed bounding-box height. Must be greater than zero; the default is no limit.</param>
+        /// <param name="maxDepth">Largest allowed bounding-box depth. Must be greater than zero; the default is no limit.</param>
         /// <exception cref="ArgumentNullException"><paramref name="rng"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">
         /// The cell count or a limit is not positive, compactness is outside 0..1, or the limits cannot hold the cell count.
@@ -141,7 +146,7 @@ namespace ShadowLib.Spatial
         public static Polycube Generate(
             IRandom rng, int cellCount, float compactness,
             int maxWidth = int.MaxValue, int maxHeight = int.MaxValue, int maxDepth = int.MaxValue) =>
-            FromOffsets(ShapeGrowth.Grow(rng, cellCount, compactness, maxWidth, maxHeight, maxDepth));
+            Normalize(ShapeGrowth.Grow(rng, cellCount, compactness, maxWidth, maxHeight, maxDepth));
 
         private static void RequireDistinct((int Col, int Row, int Layer)[] offsets, string paramName)
         {

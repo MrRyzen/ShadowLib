@@ -74,6 +74,8 @@ namespace ShadowLib.Tests
             Assert.Throws<ArgumentNullException>(() => Polyomino.Generate(null!, 4, 0.5f));
             Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 0, 0.5f));
             Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 4, float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 4, -0.01f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 4, 1.01f));
             Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 4, 0.5f, maxWidth: 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 4, 0.5f, maxHeight: 0));
             Assert.Throws<ArgumentOutOfRangeException>(() => Polyomino.Generate(rng, 13, 0.5f, 4, 3));
@@ -85,6 +87,53 @@ namespace ShadowLib.Tests
             var expected = new[] { (2, 2), (1, 2), (0, 2), (2, 3), (1, 1), (1, 0), (0, 3), (2, 1) };
 
             CollectionAssert.AreEqual(expected, Polyomino.Generate(new Xoshiro128StarStar(123UL), 8, 0.5f).Offsets.ToArray());
+        }
+
+        [Test]
+        public void Generate_Sprawling_WithinLimits_ShapeIsPinned()
+        {
+            var expected = new[] { (2, 1), (1, 1), (0, 1), (2, 2), (1, 0), (3, 2), (1, 2), (3, 1) };
+
+            CollectionAssert.AreEqual(expected, Polyomino.Generate(new Xoshiro128StarStar(123UL), 8, 0.2f, 4, 3).Offsets.ToArray());
+        }
+
+        [Test]
+        public void Generate_Blocky_WithinLimits_ShapeIsPinned()
+        {
+            var expected = new[] { (3, 0), (2, 0), (1, 0), (3, 1), (2, 1), (3, 2), (1, 1), (0, 0) };
+
+            CollectionAssert.AreEqual(expected, Polyomino.Generate(new Xoshiro128StarStar(123UL), 8, 0.9f, 4, 3).Offsets.ToArray());
+        }
+
+        [Test]
+        public void Generate_WithTightLimits_StillDrawsOncePerAddedCell()
+        {
+            var used = new Xoshiro128StarStar(77UL);
+            Polyomino.Generate(used, 12, 0.3f, 4, 3);
+
+            var reference = new Xoshiro128StarStar(77UL);
+            for (int i = 0; i < 11; i++)
+                reference.NextFloat();
+
+            Assert.AreEqual(reference.NextUInt(), used.NextUInt());
+        }
+
+        [Test]
+        public void Generate_SingleCell_DrawsNothing()
+        {
+            var used = new Xoshiro128StarStar(77UL);
+            var shape = Polyomino.Generate(used, 1, 0.5f, 1, 1);
+
+            Assert.AreEqual((1, 1, 1), (shape.Width, shape.Height, shape.CellCount));
+            Assert.AreEqual(new Xoshiro128StarStar(77UL).NextUInt(), used.NextUInt());
+        }
+
+        [Test]
+        public void Generate_HighestDraw_PicksAnAllowedCell()
+        {
+            var shape = Polyomino.Generate(new ShapeChecks.ConstantRandom(0.99999994f), 12, 0.3f, 4, 3);
+
+            Assert.AreEqual((4, 3, 12), (shape.Width, shape.Height, shape.CellCount));
         }
 
         private static int BoxArea(Polyomino shape) => shape.Width * shape.Height;

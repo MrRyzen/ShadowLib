@@ -130,6 +130,41 @@ namespace ShadowLib.Tests
             CollectionAssert.AreEqual(expected, Polycube.Generate(new Xoshiro128StarStar(123UL), 8, 0.5f).Offsets.ToArray());
         }
 
+        [Test]
+        public void Generate_Sprawling_WithinLimits_ShapeIsPinned()
+        {
+            var expected = new[]
+            {
+                (1, 0, 0), (1, 1, 0), (0, 1, 0), (1, 0, 1), (1, 2, 0), (1, 2, 1), (0, 2, 0), (0, 0, 0),
+            };
+
+            CollectionAssert.AreEqual(expected, Polycube.Generate(new Xoshiro128StarStar(123UL), 8, 0.2f, 3, 3, 2).Offsets.ToArray());
+        }
+
+        [Test]
+        public void Generate_Blocky_WithinLimits_ShapeIsPinned()
+        {
+            var expected = new[]
+            {
+                (1, 0, 0), (1, 1, 0), (0, 1, 0), (0, 0, 0), (1, 2, 0), (2, 2, 0), (2, 1, 0), (2, 0, 0),
+            };
+
+            CollectionAssert.AreEqual(expected, Polycube.Generate(new Xoshiro128StarStar(123UL), 8, 0.9f, 3, 3, 2).Offsets.ToArray());
+        }
+
+        [Test]
+        public void Generate_WithTightLimits_StillDrawsOncePerAddedCell()
+        {
+            var used = new Xoshiro128StarStar(77UL);
+            Polycube.Generate(used, 12, 0.3f, 3, 2, 2);
+
+            var reference = new Xoshiro128StarStar(77UL);
+            for (int i = 0; i < 11; i++)
+                reference.NextFloat();
+
+            Assert.AreEqual(reference.NextUInt(), used.NextUInt());
+        }
+
         private static int BoxVolume(Polycube shape) => shape.Width * shape.Height * shape.Depth;
     }
 }
