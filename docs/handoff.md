@@ -12,9 +12,9 @@ So this roadmap pass is finished. Nothing is in progress.
 
 ## Current State
 
-- Local `main` is at `9de019f` (the determinism fingerprint) plus handoff commits; the last library change is `f70836b`. **Nothing is pushed**; the user pushes. No feature branches or extra worktrees remain from this work (`determinism-fixes-and-perf` is an older branch, not touched).
-- `dotnet test ShadowLib.sln -c Release`: 279/279 (`[Explicit]` tests are not counted). `dotnet run --project ShadowLib.Runner` exits 0 and prints the same output on repeated `--no-build` runs.
-- Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1, Burst 2.0.0): 23/23 EditMode tests against the tarball built from `f70836b`.
+- Local `main` is at `d167202` plus handoff commits; that is also the last library change (the three fixes of 2026-11-26 and their review fixes). **Nothing is pushed**; the user pushes. No feature branches or extra worktrees remain from this work (`determinism-fixes-and-perf` is an older branch, not touched).
+- `dotnet test ShadowLib.sln -c Release`: 291/291 (`[Explicit]` tests are not counted). `dotnet run --project ShadowLib.Runner` exits 0 and prints the same output on repeated `--no-build` runs.
+- Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1, Burst 2.0.0): 23/23 EditMode tests against the tarball built from `d167202`. After the fixes all 39 fingerprint rows matched on all ten runtimes of the matrix (built from `5f74047`; the later review commit changed tests, docs, the constructor's argument check and one redundant flag only, and the Windows fingerprint was re-checked unchanged).
 - Version is still `0.1.0-preview.5`. `CHANGELOG.md` `[Unreleased]` holds all three sessions' work, including breaking changes. No release was cut.
 
 - **Determinism was measured across runtimes on 2026-11-26** (see "Determinism results" under Notes). One open finding: `ScalingCurve.Exponential` is not bit-identical between Windows and Linux. The user has been asked twice whether to fix it and has not answered; it is item 3 under Next Step.
