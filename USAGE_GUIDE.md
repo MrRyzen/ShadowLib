@@ -605,6 +605,36 @@ int taken = RandomWalk.Generate(rng, steps, width: 32, height: 32, start: (16, 1
 - The walk ends early when no weighted direction is open (a right-only walk stops at the right edge), so check the array length or the returned count.
 - Cells can be visited more than once. One `rng.NextFloat()` per step taken.
 
+### `SpacedPlacement` — random picks that keep their distance
+
+```csharp
+(int X, int Y)[] torches = SpacedPlacement.Place(rng,
+    candidates: floorCells,              // any IReadOnlyList<T>
+    count: 4,
+    minDistance: 6,
+    distanceFunc: (a, b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y));
+```
+
+- Candidates are visited in one shuffled order; each is kept if it is at least `minDistance` from everything already kept.
+- It may return fewer than `count` when the spacing cannot be met in that order. It never returns candidates closer than `minDistance`.
+- `T` can be anything; the distance function defines what "apart" means (Manhattan, Euclidean, path length).
+- Draws one shuffle of the candidate list (nothing when `count` is 0 or there are no candidates).
+
+### `CellularAutomata` — smooth noise into caves
+
+```csharp
+var cave = new FieldGrid<bool>(width: 64, height: 32, cellSize: 1f);   // true = wall
+CellularAutomata.Randomize(cave, rng, aliveChance: 0.45f);
+
+var rules = new CellularAutomata(birthRule: 5, surviveRule: 4);
+rules.Step(cave, iterations: 4);
+```
+
+- Each step looks at the eight cells around a cell: a dead cell comes alive with at least `birthRule` living neighbours, a living cell stays alive with at least `surviveRule`.
+- Cells outside the grid count as alive by default, which walls in the border; pass `edgesAlive: false` for open edges.
+- `Randomize` makes one `rng.NextFloat()` draw per cell, row by row. `Step` uses no randomness.
+- Keep one `CellularAutomata` and reuse it: it holds a scratch buffer, so steps after the first do not allocate. It is not thread-safe.
+
 ### `MarkovWordGenerator` — character-level name generation
 
 For procedural naming (companies, products, people): trains an order-N character Markov chain on curated word lists, then generates new words that resemble — but don't copy — the training data.
@@ -762,7 +792,9 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate` / `Polycube.Generate` returning a `List` of positions — they return the `Polyomino` / `Polycube` struct. Their `max` limits are bounding-box sizes, not coordinates, and there is no per-axis bias parameter.
 - `RandomWalk.Generate(rng, length, bounds: (w, h), bias: new DirectionBias(forward, up, down))` — that was the roadmap sketch. The real call takes `width`, `height`, `start` and a four-weight `DirectionBias(right, left, up, down)`; up is +Y. There is no self-avoiding or eight-direction walk.
-- `SpacedPlacement`, `CellularAutomata`, A* / pathfinding on `Grid2D` — all roadmap-only. Do not write code that calls these.
+- A* / pathfinding on `Grid2D`, BSP, WFC, maze generation — roadmap-only. Do not write code that calls these.
+- `SpacedPlacement.Place` guaranteeing `count` results, or finding the best possible spread — it is a single greedy pass and may return fewer. It returns `T[]`, not a `List`.
+- `CellularAutomata` with Game-of-Life style exact-count rules (B3/S23), or working on `Grid2D` — it takes two "at least N neighbours" thresholds and a `FieldGrid<bool>`.
 - `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
 - `Polycube` / `Polyomino` rotation helpers, and `SpatialGraph3D` implementing `ISpace` or working with `BinPacker` — none of these exist.
 - `DynamicWeightTable<T>.AddWeight` / `MultiplyWeight` / `ResetWeights` / `UniformWeights` / `NormalizeWeights` / `GetBaseWeight` / `SetBaseWeight` — removed. Use `SetInfluence` for odds that change with game state, `SetEnabled(item, false)` to take an item out, `SetWeight` for a permanent change.

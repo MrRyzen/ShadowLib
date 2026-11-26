@@ -167,6 +167,28 @@ namespace ShadowLib.Runner
                 Console.WriteLine($"  {new string(line)}");
             }
 
+            var cave = new FieldGrid<bool>(width: 32, height: 10, cellSize: 1f);
+            CellularAutomata.Randomize(cave, orchestrator.CreateRNG("cave"), aliveChance: 0.45f);
+            new CellularAutomata(birthRule: 5, surviveRule: 4).Step(cave, iterations: 4);
+
+            var floor = new List<(int X, int Y)>();
+            for (int y = 0; y < cave.Height; y++)
+                for (int x = 0; x < cave.Width; x++)
+                    if (!cave[x, y])
+                        floor.Add((x, y));
+            var torches = SpacedPlacement.Place(
+                orchestrator.CreateRNG("torches"), floor, count: 4, minDistance: 6,
+                distanceFunc: (a, b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y));
+
+            Console.WriteLine($"\nCellular automata cave with {torches.Length} spaced torches (T):");
+            for (int y = 0; y < cave.Height; y++)
+            {
+                var line = new char[cave.Width];
+                for (int x = 0; x < cave.Width; x++)
+                    line[x] = Array.IndexOf(torches, (x, y)) >= 0 ? 'T' : cave[x, y] ? '#' : ' ';
+                Console.WriteLine($"  {new string(line)}");
+            }
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);
