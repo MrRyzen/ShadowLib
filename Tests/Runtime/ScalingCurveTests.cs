@@ -66,6 +66,8 @@ namespace ShadowLib.Tests
                 bits[i] = BitConverter.SingleToInt32Bits(curve.Evaluate(levels[i]));
 
             CollectionAssert.AreEqual(new[] { 1124157155, 1131784019, 1219812295, 1547678579, 1896271371, 1116213458 }, bits);
+            Assert.AreEqual(1129314078, BitConverter.SingleToInt32Bits(ScalingCurve.Exponential(1f, 0.1f).Evaluate(56)),
+                "This level is where the platform power function and the fixed-order multiply disagree on Windows.");
         }
 
         [Test]

@@ -163,7 +163,7 @@ So for replay across Burst and managed code, leave `FloatMode` at its default (o
 
 What has been compared bit for bit (2026-11-26, one x64 machine, Unity 6000.6, Burst 2.0.0): raw draws, seeding, orchestrator streams and saves, every distribution, noise, curves, the shape and map generators and the pathfinders all matched across Windows .NET 8, Linux .NET 8 and 9, the Unity editor, and built Windows and Linux players on both Mono and IL2CPP. Nothing has been run on ARM. `Tests/Runtime/DeterminismFingerprint.cs` is the code that was hashed; run its `WriteFingerprint` test on two runtimes and compare the files to repeat the check.
 
-This check lives in a Unity project, not in this repo's .NET test suite, which only proves the struct is unmanaged and matches the class bit for bit. IL2CPP player builds were not checked.
+This check lives in a Unity project, not in this repo's .NET test suite, which only proves the struct is unmanaged and matches the class bit for bit. Those Burst tests run in the editor only; the built IL2CPP players were covered by the fingerprint comparison above, not by them.
 
 ### 5. Pass `IRandom` down — don't reach for the orchestrator from leaves
 

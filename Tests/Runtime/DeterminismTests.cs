@@ -12,6 +12,18 @@ namespace ShadowLib.Tests
     public class DeterminismTests
     {
         [Test]
+        public void NextDouble_ValuesArePinned()
+        {
+            var rng = new Xoshiro128StarStar(12345UL);
+            var bits = new long[4];
+            for (int i = 0; i < bits.Length; i++)
+                bits[i] = BitConverter.DoubleToInt64Bits(rng.NextDouble());
+
+            CollectionAssert.AreEqual(
+                new[] { 4603029116163366187L, 4602292499468008690L, 4598989170424644226L, 4599725355290549728L }, bits);
+        }
+
+        [Test]
         public void Xoshiro_MatchesPublishedReferenceVector()
         {
             var rng = new Xoshiro128StarStar(1UL)

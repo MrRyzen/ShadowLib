@@ -49,9 +49,13 @@ namespace ShadowLib.RNG.Distributions
 
         /// <summary>Initializes an empty table.</summary>
         /// <param name="initialCapacity">Initial capacity of the item list.</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="initialCapacity"/> is negative.</exception>
         public DynamicWeightTable(int initialCapacity = 16)
         {
-            _entries = new Entry[Math.Max(initialCapacity, 0)];
+            if (initialCapacity < 0)
+                throw new ArgumentOutOfRangeException(nameof(initialCapacity), "Capacity must not be negative.");
+
+            _entries = new Entry[initialCapacity];
         }
 
         /// <summary>Gets the number of items in the table, pickable or not.</summary>
@@ -313,7 +317,6 @@ namespace ShadowLib.RNG.Distributions
             Entry entry = _entries[index];
             entry.Units = entry.MaxUnits;
             _entries[index] = entry;
-            _plainCacheIsStale = true;
             return true;
         }
 

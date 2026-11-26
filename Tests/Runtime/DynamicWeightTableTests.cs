@@ -207,6 +207,92 @@ namespace ShadowLib.Tests
         }
 
         [Test]
+        public void Sample_EachMutatorAloneOnAWarmPlainTable_TakesEffectOnTheNextPick()
+        {
+            var rng = new Xoshiro128StarStar(5UL);
+            DynamicWeightTable<string> Warm()
+            {
+                var table = new DynamicWeightTable<string>();
+                table.Add("A", 1f);
+                table.Add("B", 1f);
+                for (int i = 0; i < 20; i++) table.Sample(rng);
+                return table;
+            }
+
+            var reweighted = Warm();
+            reweighted.SetWeight("A", 1e20f);
+            for (int i = 0; i < 50; i++) Assert.AreEqual("A", reweighted.Sample(rng), "SetWeight was ignored");
+
+            var influenced = Warm();
+            influenced.SetInfluence("A", 0f, 1f, () => -1f);
+            for (int i = 0; i < 50; i++) Assert.AreEqual("B", influenced.Sample(rng), "SetInfluence was ignored");
+
+            var disabled = Warm();
+            disabled.SetEnabled("A", false);
+            for (int i = 0; i < 50; i++) Assert.AreEqual("B", disabled.Sample(rng), "SetEnabled was ignored");
+
+            var stocked = Warm();
+            stocked.SetStock("A", 1, 1);
+            int picksOfA = 0;
+            for (int i = 0; i < 50; i++) picksOfA += stocked.Sample(rng) == "A" ? 1 : 0;
+            Assert.AreEqual(1, picksOfA, "SetStock was ignored");
+
+            var removed = Warm();
+            removed.TryRemove("A");
+            for (int i = 0; i < 50; i++) Assert.AreEqual("B", removed.Sample(rng), "TryRemove was ignored");
+
+            var overflowing = new DynamicWeightTable<string>();
+            overflowing.Add("A", float.MaxValue);
+            overflowing.Add("B", float.MaxValue);
+            Assert.Throws<OverflowException>(() => overflowing.Sample(rng));
+            overflowing.Clear();
+            Assert.IsFalse(overflowing.TrySample(rng, out _), "Clear left the old total behind");
+        }
+
+        [Test]
+        public void Sample_PlainTable_SumsWeightsInItemOrder_OnBothPaths()
+        {
+            var draw = new FixedRandom(1.1920929E-07f);
+            var plain = new DynamicWeightTable<int>();
+            var general = new DynamicWeightTable<int>();
+            foreach (var table in new[] { plain, general })
+            {
+                table.Add(0, 1f);
+                table.Add(1, 1f);
+                table.Add(2, 16777216f);
+            }
+            general.SetStock(0, int.MaxValue);
+
+            Assert.AreEqual(2, plain.Sample(draw));
+            Assert.AreEqual(2, general.Sample(draw));
+        }
+
+        [Test]
+        public void Sample_AfterGrowingPastTheFirstCapacity_SeesTheNewItems()
+        {
+            var rng = new Xoshiro128StarStar(5UL);
+            var table = new DynamicWeightTable<int>(initialCapacity: 2);
+            table.Add(0, 1f);
+            table.Add(1, 1f);
+            for (int i = 0; i < 20; i++) table.Sample(rng);
+
+            for (int i = 2; i < 60; i++) table.Add(i, 1f);
+            table.Add(60, 1e30f);
+
+            for (int i = 0; i < 50; i++) Assert.AreEqual(60, table.Sample(rng));
+        }
+
+        [Test]
+        public void Constructor_RejectsNegativeCapacity_AndAcceptsZero()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new DynamicWeightTable<int>(-1));
+
+            var table = new DynamicWeightTable<int>(0);
+            table.Add(7, 1f);
+            Assert.AreEqual(7, table.Sample(new Xoshiro128StarStar(1UL)));
+        }
+
+        [Test]
         public void Sample_PlainTable_SequenceIsPinned()
         {
             var table = PlainTable();
