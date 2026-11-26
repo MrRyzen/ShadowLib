@@ -186,17 +186,21 @@ namespace ShadowLib.RNG.Sources
                 throw new ArgumentOutOfRangeException(nameof(max), "max must be greater than min");
 
             uint range = (uint)(max - min);
+            uint mask = range - 1;
+            if ((range & mask) == 0)
+                return min + (int)(NextUInt() & mask);
 
-            // Rejection sampling (Lemire-style threshold)
-            // threshold = (2^32 % range)
-            uint threshold = (uint)(unchecked((0u - range) % range));
-
-            while (true)
+            // Rejection sampling: a draw below (2^32 % range) is redrawn. That threshold is always below
+            // the range, so the division that computes it is skipped unless the draw is that small.
+            uint r = NextUInt();
+            if (r < range)
             {
-                uint r = NextUInt();
-                if (r >= threshold)
-                    return min + (int)(r % range);
+                uint threshold = unchecked(0u - range) % range;
+                while (r < threshold)
+                    r = NextUInt();
             }
+
+            return min + (int)(r % range);
         }
 
         /// <summary>
@@ -231,17 +235,19 @@ namespace ShadowLib.RNG.Sources
                 throw new ArgumentOutOfRangeException(nameof(max), "max must be greater than min");
 
             ulong range = max - min;
+            ulong mask = range - 1;
+            if ((range & mask) == 0)
+                return min + (NextULong() & mask);
 
-            // Rejection sampling (Lemire-style threshold)
-            // threshold = (2^64 % range)
-            ulong threshold = (ulong)(unchecked((0UL - range) % range));
-
-            while (true)
+            ulong r = NextULong();
+            if (r < range)
             {
-                ulong r = NextULong();
-                if (r >= threshold)
-                    return min + (r % range);
+                ulong threshold = unchecked(0UL - range) % range;
+                while (r < threshold)
+                    r = NextULong();
             }
+
+            return min + (r % range);
         }
 
         private static uint RotL(uint x, int k)

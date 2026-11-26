@@ -11,6 +11,74 @@ namespace ShadowLib.Tests
     [TestFixture]
     public class DeterminismTests
     {
+        private static int ReferenceRange(Xoshiro128StarStar rng, int min, int max)
+        {
+            uint range = (uint)(max - min);
+            uint threshold = unchecked(0u - range) % range;
+            while (true)
+            {
+                uint r = rng.NextUInt();
+                if (r >= threshold)
+                    return min + (int)(r % range);
+            }
+        }
+
+        private static ulong ReferenceRange(Xoshiro128StarStar rng, ulong min, ulong max)
+        {
+            ulong range = max - min;
+            ulong threshold = unchecked(0UL - range) % range;
+            while (true)
+            {
+                ulong r = rng.NextULong();
+                if (r >= threshold)
+                    return min + (r % range);
+            }
+        }
+
+        [Test]
+        public void Range_Int_DrawsAndReturnsExactlyLikeTheOriginalRejectionSampler()
+        {
+            var actual = new Xoshiro128StarStar(2024UL);
+            var expected = new Xoshiro128StarStar(2024UL);
+            var shape = new Xoshiro128StarStar(7UL);
+            var spans = new long[] { 1, 2, 3, 4, 5, 7, 8, 100, 1000, 1024, 65536, 65537, 1L << 30, (1L << 31) - 1, 1L << 31, (1L << 31) + 1, 3_000_000_000, (1L << 32) - 1 };
+
+            for (int i = 0; i < 400_000; i++)
+            {
+                long span = i % 3 == 0 ? spans[i % spans.Length] : 1 + (long)(shape.NextUInt() % (i % 2 == 0 ? 5000u : uint.MaxValue));
+                int min = (int)Math.Max(int.MinValue, Math.Min(int.MaxValue - span, (long)shape.NextInt()));
+                long max = min + span;
+                if (max > int.MaxValue)
+                {
+                    min = int.MinValue;
+                    max = Math.Min(int.MaxValue, int.MinValue + span);
+                }
+
+                Assert.AreEqual(ReferenceRange(expected, min, (int)max), actual.Range(min, (int)max), $"draw {i}: [{min}, {max})");
+            }
+
+            Assert.AreEqual(expected.NextUInt(), actual.NextUInt(), "the two samplers consumed a different number of draws");
+        }
+
+        [Test]
+        public void Range_ULong_DrawsAndReturnsExactlyLikeTheOriginalRejectionSampler()
+        {
+            var actual = new Xoshiro128StarStar(2025UL);
+            var expected = new Xoshiro128StarStar(2025UL);
+            var shape = new Xoshiro128StarStar(8UL);
+            var spans = new ulong[] { 1, 2, 3, 8, 1000, 1UL << 32, (1UL << 32) + 1, 1UL << 63, (1UL << 63) + 1, 12_000_000_000_000_000_000UL, ulong.MaxValue };
+
+            for (int i = 0; i < 300_000; i++)
+            {
+                ulong span = i % 3 == 0 ? spans[i % spans.Length] : 1 + shape.NextULong() % (i % 2 == 0 ? 5000UL : ulong.MaxValue);
+                ulong min = span == ulong.MaxValue ? 0 : shape.NextULong() % (ulong.MaxValue - span);
+
+                Assert.AreEqual(ReferenceRange(expected, min, min + span), actual.Range(min, min + span), $"draw {i}: [{min}, +{span})");
+            }
+
+            Assert.AreEqual(expected.NextUInt(), actual.NextUInt(), "the two samplers consumed a different number of draws");
+        }
+
         [Test]
         public void NextDouble_ValuesArePinned()
         {

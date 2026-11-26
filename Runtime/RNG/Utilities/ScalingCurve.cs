@@ -64,7 +64,7 @@ namespace ShadowLib.RNG.Utilities
                 // Explicit casts pin every step to single precision on runtimes that evaluate float math in double.
                 CurveType.Linear => (float)(_start + (float)(_rate * level)),
                 CurveType.Exponential => (float)(_start * IntegerPower((float)(1f + _rate), level)),
-                CurveType.Logarithmic => (float)(_start + (float)(_rate * (float)MathF.Log(level + 1))),
+                CurveType.Logarithmic => (float)(_start + (float)(_rate * NaturalLog(unchecked(level + 1)))),
                 CurveType.Stepped => EvaluateStepped(level),
                 _ => throw new InvalidOperationException($"Unknown curve type: {_type}")
             };
@@ -86,6 +86,38 @@ namespace ShadowLib.RNG.Utilities
 
             return (float)(exponent < 0 ? 1.0 / result : result);
         }
+
+        // add, multiply and divide only, for the same reason as IntegerPower: MathF.Log is the platform's
+        private static float NaturalLog(int value)
+        {
+            if (value <= 0)
+                return value == 0 ? float.NegativeInfinity : float.NaN;
+
+            double mantissa = value;
+            int exponent = 0;
+            while (mantissa >= 2.0)
+            {
+                mantissa *= 0.5;
+                exponent++;
+            }
+
+            if (mantissa > SquareRootOfTwo)
+            {
+                mantissa *= 0.5;
+                exponent++;
+            }
+
+            double ratio = (mantissa - 1.0) / (mantissa + 1.0);
+            double square = ratio * ratio;
+            double series = 1.0 / 23.0;
+            for (int denominator = 21; denominator >= 1; denominator -= 2)
+                series = series * square + 1.0 / denominator;
+
+            return (float)(exponent * NaturalLogOfTwo + 2.0 * ratio * series);
+        }
+
+        private const double NaturalLogOfTwo = 0.6931471805599453;
+        private const double SquareRootOfTwo = 1.4142135623730951;
 
         private float EvaluateStepped(int level)
         {

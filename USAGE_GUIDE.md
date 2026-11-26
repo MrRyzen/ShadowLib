@@ -419,8 +419,7 @@ var xp        = ScalingCurve.Exponential(start: 100f, rate: 0.15f);
 var damage    = ScalingCurve.LinearClamped(start: 10f, rate: 2f, cap: 100f);
 var rarity    = ScalingCurve.Logarithmic(start: 1f, rate: 0.5f);
 var dropTier  = ScalingCurve.Stepped((1, 10f), (5, 20f), (10, 30f));
-// Linear, Exponential and Stepped give the same bits on every platform.
-// Logarithmic uses MathF.Log, which is not guaranteed to: do not feed it into anything that must replay across Windows and Linux.
+// All four give the same bits on every platform: none of them calls the platform's pow or log.
 
 float xpReq = xp.Evaluate(playerLevel);
 float dmg   = damage.Evaluate(playerLevel);

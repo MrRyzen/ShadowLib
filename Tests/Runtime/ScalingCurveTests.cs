@@ -78,5 +78,45 @@ namespace ShadowLib.Tests
             Assert.IsTrue(float.IsPositiveInfinity(ScalingCurve.Exponential(1f, 1f).Evaluate(int.MaxValue)));
             Assert.AreEqual(0f, ScalingCurve.Exponential(1f, 1f).Evaluate(int.MinValue));
         }
+
+        [Test]
+        public void Logarithmic_MatchesTheNaturalLogToFloatAccuracy_AndIsExactAtLevelZero()
+        {
+            var curve = ScalingCurve.Logarithmic(0f, 1f);
+
+            Assert.AreEqual(0f, curve.Evaluate(0));
+            for (int level = 0; level < 200_000; level += level < 5000 ? 1 : 37)
+            {
+                double expected = Math.Log(level + 1.0);
+                Assert.AreEqual(expected, curve.Evaluate(level), Math.Max(expected, 1.0) * 1.5e-7, $"level {level}");
+            }
+
+            Assert.AreEqual(Math.Log(int.MaxValue), curve.Evaluate(int.MaxValue - 1), 3e-6);
+        }
+
+        [Test]
+        public void Logarithmic_ValuesArePinned_SoEveryPlatformMustProduceTheSameBits()
+        {
+            var curve = ScalingCurve.Logarithmic(5f, 3.3f);
+            var levels = new[] { 1, 2, 9, 99, 1000, 123456, 2_000_000_000 };
+            var bits = new int[levels.Length];
+            for (int i = 0; i < levels.Length; i++)
+                bits[i] = BitConverter.SingleToInt32Bits(curve.Evaluate(levels[i]));
+
+            CollectionAssert.AreEqual(new[] { 1089024580, 1091174841, 1095340949, 1101108117, 1105093665, 1110360205, 1117215019 }, bits);
+            Assert.AreEqual(1089186399, BitConverter.SingleToInt32Bits(ScalingCurve.Logarithmic(0f, 1f).Evaluate(1578)),
+                "This level is where the platform log function and the fixed-order series disagree on Windows.");
+        }
+
+        [Test]
+        public void Logarithmic_BelowLevelZero_BehavesLikeTheLogOfZeroAndOfANegativeNumber()
+        {
+            var curve = ScalingCurve.Logarithmic(5f, 3.3f);
+
+            Assert.IsTrue(float.IsNegativeInfinity(curve.Evaluate(-1)));
+            Assert.IsTrue(float.IsNaN(curve.Evaluate(-2)));
+            Assert.IsTrue(float.IsNaN(curve.Evaluate(int.MaxValue)));
+            Assert.AreEqual(6f, ScalingCurve.Logarithmic(5f, 3.3f, 6f).Evaluate(50));
+        }
     }
 }
