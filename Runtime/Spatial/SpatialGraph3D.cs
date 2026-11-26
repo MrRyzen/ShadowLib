@@ -8,7 +8,8 @@ namespace ShadowLib.Spatial
     /// <typeparam name="TOccupant">The item type.</typeparam>
     public readonly struct KilledCell<TOccupant>
     {
-        internal KilledCell(int x, int y, int layer, bool wasOccupied, TOccupant occupant)
+        /// <summary>Creates a result. The backpack creates these; the constructor is public so game code can test its own damage handling.</summary>
+        public KilledCell(int x, int y, int layer, bool wasOccupied, TOccupant occupant)
         {
             X = x;
             Y = y;
@@ -58,6 +59,9 @@ namespace ShadowLib.Spatial
 
         private const CellState Placeable = CellState.Exists | CellState.Alive;
 
+        // the largest array length every supported runtime can allocate
+        private const int MaxVolume = 0x7FEFFFFF;
+
         private readonly CellState[] _states;
         private readonly TOccupant[] _occupants;
         private readonly Dictionary<TOccupant, int[]> _cellsByOccupant;
@@ -68,7 +72,7 @@ namespace ShadowLib.Spatial
         /// <param name="height">Rows. Must be greater than zero.</param>
         /// <param name="layers">Layers. Must be greater than zero.</param>
         /// <param name="occupantComparer">How items are told apart; the default comparer when null.</param>
-        /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive, or the volume does not fit in an int.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive, or the volume is larger than an array can hold.</exception>
         public SpatialGraph3D(int width, int height, int layers = 1, IEqualityComparer<TOccupant>? occupantComparer = null)
         {
             if (width <= 0)
@@ -77,8 +81,8 @@ namespace ShadowLib.Spatial
                 throw new ArgumentOutOfRangeException(nameof(height), height, "Height must be greater than zero.");
             if (layers <= 0)
                 throw new ArgumentOutOfRangeException(nameof(layers), layers, "Layers must be greater than zero.");
-            if ((long)width * height * layers > int.MaxValue)
-                throw new ArgumentOutOfRangeException(nameof(width), "The box volume does not fit in an int.");
+            if ((long)width * height * layers > MaxVolume)
+                throw new ArgumentOutOfRangeException(nameof(width), $"The box volume must not exceed {MaxVolume} cells.");
 
             Width = width;
             Height = height;
@@ -213,6 +217,7 @@ namespace ShadowLib.Spatial
         /// <summary>Places an item on every cell of the shape, or on none.</summary>
         /// <returns>False, changing nothing, if <see cref="CanPlace"/> is false.</returns>
         /// <exception cref="ArgumentException">The item is already placed. Move it with <see cref="Free"/> then <see cref="Place"/>.</exception>
+        /// <exception cref="ArgumentNullException">The item is null.</exception>
         public bool Place(int x, int y, int layer, TOccupant occupant, Polycube shape)
         {
             if (_cellsByOccupant.ContainsKey(occupant))
@@ -237,6 +242,7 @@ namespace ShadowLib.Spatial
 
         /// <summary>Removes an item from every cell it holds, including dead ones.</summary>
         /// <returns>False if the item was not placed.</returns>
+        /// <exception cref="ArgumentNullException">The item is null.</exception>
         public bool Free(TOccupant occupant)
         {
             if (!_cellsByOccupant.Remove(occupant, out int[]? cells))
@@ -251,10 +257,12 @@ namespace ShadowLib.Spatial
         }
 
         /// <summary>Returns whether the item is placed.</summary>
+        /// <exception cref="ArgumentNullException">The item is null.</exception>
         public bool Contains(TOccupant occupant) => _cellsByOccupant.ContainsKey(occupant);
 
         /// <summary>Writes the positions an item holds, in ascending <see cref="GetIndex"/> order, dead cells included.</summary>
         /// <returns>The number of positions written: at most <c>buffer.Length</c>, and 0 for an item that is not placed.</returns>
+        /// <exception cref="ArgumentNullException">The item is null.</exception>
         public int GetCells(TOccupant occupant, Span<(int X, int Y, int Layer)> buffer)
         {
             if (!_cellsByOccupant.TryGetValue(occupant, out int[]? cells))

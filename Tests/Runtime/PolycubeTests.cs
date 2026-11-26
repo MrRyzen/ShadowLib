@@ -57,6 +57,22 @@ namespace ShadowLib.Tests
         }
 
         [Test]
+        public void FromPolyomino_RejectsAFlatShapeWithRepeatedCells()
+        {
+            var repeated = Polyomino.FromOffsets((0, 0), (0, 0), (1, 0));
+            Assert.Throws<ArgumentException>(() => Polycube.FromPolyomino(repeated));
+        }
+
+        [Test]
+        public void FromOffsets_RejectsASpanTooWideToNormalize()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => Polycube.FromOffsets((int.MinValue, 0, 0), (int.MaxValue, 0, 0)));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Polycube.FromOffsets((0, 0, 0), (0, int.MaxValue, 0)));
+            Assert.Throws<ArgumentOutOfRangeException>(() => Polycube.FromOffsets((0, 0, -2), (0, 0, int.MaxValue)));
+            Assert.AreEqual(int.MaxValue, Polycube.FromOffsets((0, 0, 0), (int.MaxValue - 1, 0, 0)).Width);
+        }
+
+        [Test]
         public void Single_And_Default()
         {
             Assert.AreEqual(1, Polycube.Single.CellCount);

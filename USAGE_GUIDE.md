@@ -507,9 +507,9 @@ A backpack with depth: a `width × height × layers` box where only the cells yo
 ```csharp
 using ShadowLib.Spatial;
 
-var pack = new SpatialGraph3D<Item>(width: 6, height: 4, layers: 3);
+var pack = new SpatialGraph3D<Item>(width: 7, height: 4, layers: 3);
 pack.AddPocket(Polycube.FromBox(4, 4, 3), x: 0, y: 0);            // main compartment
-pack.AddPocket(Polycube.FromBox(2, 2, 1), x: 4, y: 0);            // side pouch
+pack.AddPocket(Polycube.FromBox(2, 2, 1), x: 5, y: 0);            // side pouch, one column away so it is its own pocket
 
 var crateShape = Polycube.FromBox(2, 2, 2);
 if (pack.CanPlace(0, 0, 0, crateShape))

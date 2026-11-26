@@ -107,9 +107,9 @@ namespace ShadowLib.Runner
             bool second = shop.TrySample(wheelRng, out _);
             Console.WriteLine($"  stocked item: first pick {first} ({relic}), second pick {second} (sold out)");
 
-            var pack = new SpatialGraph3D<string>(width: 6, height: 4, layers: 3);
+            var pack = new SpatialGraph3D<string>(width: 7, height: 4, layers: 3);
             pack.AddPocket(Polycube.FromBox(4, 4, 3), 0, 0, 0);
-            pack.AddPocket(Polycube.FromBox(2, 2, 1), 4, 0, 0);
+            pack.AddPocket(Polycube.FromBox(2, 2, 1), 5, 0, 0);
             pack.Place(0, 0, 0, "Ammo Crate", Polycube.FromBox(2, 2, 2));
             pack.Place(2, 0, 0, "Rifle", Polycube.FromBox(1, 4, 1));
             string[] carried = ["Ammo Crate", "Rifle"];

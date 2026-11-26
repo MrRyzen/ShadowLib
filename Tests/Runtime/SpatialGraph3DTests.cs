@@ -89,6 +89,58 @@ namespace ShadowLib.Tests
             var pack = FullPack();
             pack.Place(0, 0, 0, "crate", Crate);
             Assert.Throws<ArgumentException>(() => pack.Place(2, 0, 0, "crate", Polycube.Single));
+            Assert.IsFalse(pack.IsOccupied(2, 0, 0));
+            Assert.AreEqual(8, pack.GetCells("crate", new (int X, int Y, int Layer)[24]));
+        }
+
+        [Test]
+        public void GetCells_IsInIndexOrder_WhateverTheShapeOrder()
+        {
+            var pack = FullPack();
+            pack.Place(0, 0, 0, "bent", Polycube.FromOffsets((1, 1, 1), (1, 0, 0), (0, 0, 0)));
+            var cells = new (int X, int Y, int Layer)[3];
+            Assert.AreEqual(3, pack.GetCells("bent", cells));
+            CollectionAssert.AreEqual(new[] { (0, 0, 0), (1, 0, 0), (1, 1, 1) }, cells);
+        }
+
+        [Test]
+        public void Constructor_RejectsABoxTooBigToAllocate()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new SpatialGraph3D<byte>(int.MaxValue, 1, 1));
+        }
+
+        [Test]
+        public void NullOccupant_Throws()
+        {
+            var pack = FullPack();
+            Assert.Throws<ArgumentNullException>(() => pack.Place(0, 0, 0, null!, Polycube.Single));
+            Assert.Throws<ArgumentNullException>(() => pack.Free(null!));
+            Assert.Throws<ArgumentNullException>(() => pack.Contains(null!));
+            Assert.Throws<ArgumentNullException>(() => pack.GetCells(null!, new (int X, int Y, int Layer)[1]));
+            Assert.IsFalse(pack.IsOccupied(0, 0, 0));
+        }
+
+        [Test]
+        public void KilledCell_CanBeBuiltByGameTests()
+        {
+            var cell = new KilledCell<string>(1, 2, 3, true, "crate");
+            Assert.AreEqual((1, 2, 3, true, "crate"), (cell.X, cell.Y, cell.Layer, cell.WasOccupied, cell.Occupant));
+        }
+
+        [Test]
+        public void FindPockets_FollowsAPocketBackwardsOnEveryAxis()
+        {
+            var bendsBackInY = new SpatialGraph3D<string>(3, 2, 1);
+            foreach (var (x, y) in new[] { (0, 0), (0, 1), (1, 1), (2, 1), (2, 0) }) bendsBackInY.AddCell(x, y, 0);
+            Assert.AreEqual(1, bendsBackInY.FindPockets(new int[6]));
+
+            var bendsBackInX = new SpatialGraph3D<string>(2, 2, 1);
+            foreach (var (x, y) in new[] { (1, 0), (1, 1), (0, 1) }) bendsBackInX.AddCell(x, y, 0);
+            Assert.AreEqual(1, bendsBackInX.FindPockets(new int[4]));
+
+            var bendsBackInLayer = new SpatialGraph3D<string>(3, 1, 2);
+            foreach (var (x, layer) in new[] { (0, 0), (0, 1), (1, 1), (2, 1), (2, 0) }) bendsBackInLayer.AddCell(x, 0, layer);
+            Assert.AreEqual(1, bendsBackInLayer.FindPockets(new int[6]));
         }
 
         [Test]
@@ -207,7 +259,8 @@ namespace ShadowLib.Tests
             Assert.IsTrue(pack.Free("crate"));
             Assert.IsFalse(pack.IsOccupied(1, 1, 1));
             Assert.IsFalse(pack.IsAlive(1, 1, 1));
-            Assert.AreEqual(22, pack.AliveCount);
+            Assert.IsTrue(pack.Exists(1, 1, 1));
+            Assert.AreEqual((24, 22), (pack.ExistingCount, pack.AliveCount));
             Assert.IsFalse(pack.CanPlace(0, 0, 0, Crate));
             Assert.IsTrue(pack.Place(2, 0, 0, "crate", Crate));
         }
@@ -305,12 +358,38 @@ namespace ShadowLib.Tests
         [Test]
         public void SavedState_IsRebuilt_CellsThenItemsThenDeadCells()
         {
-            var pack = new SpatialGraph3D<string>(4, 3, 2);
-            pack.AddPocket(Polycube.FromBox(4, 3, 2), 0, 0, 0);
-            pack.Place(0, 0, 0, "crate", Crate);
-            pack.TryKill(1, 0, 0, out _);
-            Assert.IsTrue(pack.IsOccupied(1, 0, 0));
-            Assert.IsFalse(pack.IsAlive(1, 0, 0));
+            var original = FullPack();
+            original.Place(0, 0, 0, "crate", Crate);
+            original.TryKill(1, 0, 0, out _);
+            original.TryKill(3, 2, 1, out _);
+
+            var rebuilt = new SpatialGraph3D<string>(4, 3, 2);
+            for (int index = 0; index < original.Volume; index++)
+            {
+                var (x, y, layer) = original.GetPosition(index);
+                if (original.Exists(x, y, layer)) rebuilt.AddCell(x, y, layer);
+            }
+            var cells = new (int X, int Y, int Layer)[8];
+            original.GetCells("crate", cells);
+            Assert.IsTrue(rebuilt.Place(cells[0].X, cells[0].Y, cells[0].Layer, "crate", Crate));
+            for (int index = 0; index < original.Volume; index++)
+            {
+                var (x, y, layer) = original.GetPosition(index);
+                if (!original.IsAlive(x, y, layer)) rebuilt.TryKill(x, y, layer, out _);
+            }
+
+            for (int index = 0; index < original.Volume; index++)
+            {
+                var (x, y, layer) = original.GetPosition(index);
+                Assert.AreEqual(original.IsAlive(x, y, layer), rebuilt.IsAlive(x, y, layer));
+                Assert.AreEqual(original.IsOccupied(x, y, layer), rebuilt.IsOccupied(x, y, layer));
+            }
+            Assert.IsTrue(rebuilt.IsOccupied(1, 0, 0));
+            Assert.IsFalse(rebuilt.IsAlive(1, 0, 0));
+
+            var wrongOrder = FullPack();
+            wrongOrder.TryKill(1, 0, 0, out _);
+            Assert.IsFalse(wrongOrder.Place(0, 0, 0, "crate", Crate));
         }
 
         [Test]

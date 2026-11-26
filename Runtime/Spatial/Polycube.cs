@@ -69,23 +69,27 @@ namespace ShadowLib.Spatial
 
         /// <summary>Creates a shape from explicit offsets, shifted so each axis starts at zero. Input order is kept.</summary>
         /// <exception cref="ArgumentException">No offsets were given, or two offsets are the same cell.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The offsets are too far apart on an axis to normalize.</exception>
         public static Polycube FromOffsets(params (int Col, int Row, int Layer)[] offsets)
         {
             if (offsets == null || offsets.Length == 0)
                 throw new ArgumentException("At least one offset is required.", nameof(offsets));
 
+            RequireDistinct(offsets, nameof(offsets));
+
             var min = offsets[0];
             var max = offsets[0];
-            var seen = new HashSet<(int, int, int)>();
-            for (int i = 0; i < offsets.Length; i++)
+            for (int i = 1; i < offsets.Length; i++)
             {
                 var offset = offsets[i];
-                if (!seen.Add(offset))
-                    throw new ArgumentException($"Offset {offset} appears more than once.", nameof(offsets));
-
                 min = (Math.Min(min.Col, offset.Col), Math.Min(min.Row, offset.Row), Math.Min(min.Layer, offset.Layer));
                 max = (Math.Max(max.Col, offset.Col), Math.Max(max.Row, offset.Row), Math.Max(max.Layer, offset.Layer));
             }
+
+            if ((long)max.Col - min.Col >= int.MaxValue
+                || (long)max.Row - min.Row >= int.MaxValue
+                || (long)max.Layer - min.Layer >= int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(offsets), "The offsets span more than an int can hold.");
 
             var normalized = new (int Col, int Row, int Layer)[offsets.Length];
             for (int i = 0; i < offsets.Length; i++)
@@ -97,7 +101,7 @@ namespace ShadowLib.Spatial
         /// <summary>Creates a shape by repeating a flat shape through a number of layers.</summary>
         /// <param name="shape">The flat shape. Must have at least one cell.</param>
         /// <param name="depth">How many layers deep. Must be greater than zero.</param>
-        /// <exception cref="ArgumentException">The flat shape has no cells.</exception>
+        /// <exception cref="ArgumentException">The flat shape has no cells, or lists the same cell twice.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Depth is not positive, or the cell count does not fit in an int.</exception>
         public static Polycube FromPolyomino(Polyomino shape, int depth = 1)
         {
@@ -115,7 +119,18 @@ namespace ShadowLib.Spatial
                 for (int cell = 0; cell < flat.Length; cell++)
                     offsets[i++] = (flat[cell].Col, flat[cell].Row, layer);
 
+            RequireDistinct(offsets, nameof(shape));
             return new Polycube(offsets, shape.Width, shape.Height, depth);
+        }
+
+        private static void RequireDistinct((int Col, int Row, int Layer)[] offsets, string paramName)
+        {
+            var seen = new HashSet<(int, int, int)>();
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                if (!seen.Add(offsets[i]))
+                    throw new ArgumentException($"Offset {offsets[i]} appears more than once.", paramName);
+            }
         }
     }
 }
