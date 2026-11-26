@@ -26,6 +26,7 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - `RandomWalk.Generate` and `DirectionBias`: a seeded walk over a bounded grid with four direction weights, as an array or written into a caller's `Span`.
 - `SpacedPlacement.Place(rng, candidates, count, minDistance, distanceFunc)`: random candidates that keep a minimum distance apart.
 - `CellularAutomata`: birth / survive rules stepped over a `FieldGrid<bool>`, with `CellularAutomata.Randomize(grid, rng, aliveChance)` for the starting noise.
+- `ShadowLib.Spatial.Pathfinding`: `GridAStar`, `GridJumpPointSearch` and `GridFlowField`, allocation-free searches over a byte cost map that also run inside Burst jobs, plus `GridPathfinder`, a wrapper that bakes costs from a `Grid2D` and works in (x, y) coordinates. Four-way movement by default, eight-way behind `allowDiagonal`.
 - `SpatialGraph3D<TOccupant>` is now a complete 3D inventory that wears out: `Polycube` items placed across layers, `TryKill` / `TryKillRandom(rng)` returning a `KilledCell<TOccupant>` and leaving the item in place, `Repair`, `FindPockets`, plus `Exists`, `IsAlive`, `IsOccupied`, `TryGetOccupant`, `Contains`, `GetCells`, `Volume`, `ExistingCount`, `AliveCount` and an optional occupant comparer.
 
 ### Removed

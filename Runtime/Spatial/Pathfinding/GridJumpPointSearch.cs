@@ -213,14 +213,38 @@ namespace ShadowLib.Spatial.Pathfinding
 
         private static int ScanStraight(ReadOnlySpan<byte> costs, int width, int height, int goal, int x, int y, int dx, int dy)
         {
-            while (GridPathing.IsWalkable(costs, width, height, x, y))
-            {
-                int cell = y * width + x;
-                if (cell == goal || HasForcedTurn(costs, width, height, x, y, dx, dy))
-                    return cell;
+            if ((uint)x >= (uint)width || (uint)y >= (uint)height)
+                return None;
 
-                x += dx;
-                y += dy;
+            int cell = y * width + x;
+            if (dx != 0)
+            {
+                bool hasBelow = y > 0;
+                bool hasAbove = y + 1 < height;
+                for (int remaining = dx > 0 ? width - x : x + 1; remaining > 0; remaining--, cell += dx)
+                {
+                    if (costs[cell] == 0)
+                        return None;
+                    if (cell == goal
+                        || (hasBelow && costs[cell - width] != 0 && costs[cell - width - dx] == 0)
+                        || (hasAbove && costs[cell + width] != 0 && costs[cell + width - dx] == 0))
+                        return cell;
+                }
+
+                return None;
+            }
+
+            bool hasLeft = x > 0;
+            bool hasRight = x + 1 < width;
+            int stride = dy * width;
+            for (int remaining = dy > 0 ? height - y : y + 1; remaining > 0; remaining--, cell += stride)
+            {
+                if (costs[cell] == 0)
+                    return None;
+                if (cell == goal
+                    || (hasLeft && costs[cell - 1] != 0 && costs[cell - 1 - stride] == 0)
+                    || (hasRight && costs[cell + 1] != 0 && costs[cell + 1 - stride] == 0))
+                    return cell;
             }
 
             return None;

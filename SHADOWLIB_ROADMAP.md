@@ -54,6 +54,8 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 - **`Polycube`** — Immutable 3D shape struct from a box, explicit offsets, or an extruded `Polyomino`. Normalized to a (0,0,0) anchor. `Polycube.Generate` is the 3D shape generator, same growth rule as `Polyomino.Generate`.
 - **`SpatialGraph3D<TOccupant>`** — 3D inventory box that wears out (a Tarkov-style backpack with depth). Pockets of cells, all-or-nothing `Polycube` item placement, cells that die and can be repaired (`TryKill`, seeded `TryKillRandom`, `Repair`), and `FindPockets` for which living cells still form one compartment. Killing a cell reports what was on it and leaves the item in place.
 
+- **Grid pathfinding (`ShadowLib.Spatial.Pathfinding`)** — `GridAStar` (cheapest path on weighted terrain), `GridJumpPointSearch` (walkable/blocked maps, fastest on rooms and corridors) and `GridFlowField` (one field for any number of agents sharing goals). Static functions over a byte cost map and caller-owned `Span` buffers: no allocation per query, integer costs, four-way or eight-way movement, and callable from Burst jobs. `GridPathfinder` wraps them for `Grid2D` in (x, y) terms.
+
 **Future consideration:** `CanOccupyCell(x, y, w, h)` region check is O(w\*h). For large grids + large entity footprints (RTS base placement, 1000x1000 influence maps), consider adding an occupancy bitmask or 2D prefix-sum occupancy map for O(1) rect queries.
 
 ### Procedural
@@ -67,10 +69,6 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ---
 
 ## Not Yet Implemented
-
-### A* pathfinding on Grid2D
-
-Shortest path between two cells of a `Grid2D`, with caller-supplied walkability and step cost. No API designed yet. Requirements: no allocation per query, tuned for speed, and a core usable from Unity jobs / Burst / ECS (an unmanaged struct over caller-supplied buffers, since `Runtime/` cannot reference `Unity.Collections`). (Pathfinding was deliberately left out of `SpatialGraph3D`.)
 
 ### BSP, WFC, Maze Gen
 
@@ -91,7 +89,7 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 7 | `SimplexNoise` | `IRandom` | Medium | **Done** |
 | 8 | `IEffect<T>` + `EffectWheel<T,T>` | `DynamicWeightTable` | Low | **Done** |
 | 9 | `SpatialGraph3D` + `Polycube` (3D inventory that wears out, with pocket analysis) | `Polyomino` | Medium | **Done** |
-| 10 | A* pathfinding on `Grid2D` | `Grid2D` | Medium | Pending |
+| 10 | Grid pathfinding: A*, Jump Point Search, flow fields | `Grid2D` | Medium | **Done** |
 | 11 | `Polyomino Generator` + `Polycube Generator` | `IRandom` | Low | **Done** |
 | 12 | `Random Walk` | `IRandom` | Low | **Done** |
 | 13 | `Spaced Placement` | — | Low | **Done** |

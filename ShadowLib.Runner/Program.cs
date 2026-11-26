@@ -4,6 +4,7 @@ namespace ShadowLib.Runner
     using ShadowLib.RNG.Distributions;
     using ShadowLib.RNG.Utilities;
     using ShadowLib.Spatial;
+    using ShadowLib.Spatial.Pathfinding;
     using ShadowLib.Procedural;
 
     public class Program
@@ -187,6 +188,33 @@ namespace ShadowLib.Runner
                 for (int x = 0; x < cave.Width; x++)
                     line[x] = Array.IndexOf(torches, (x, y)) >= 0 ? 'T' : cave[x, y] ? '#' : ' ';
                 Console.WriteLine($"  {new string(line)}");
+            }
+
+            var pathfinder = new GridPathfinder(cave.Width, cave.Height);
+            for (int y = 0; y < cave.Height; y++)
+                for (int x = 0; x < cave.Width; x++)
+                    pathfinder.SetCost(x, y, cave[x, y] ? (byte)0 : (byte)1);
+
+            var from = torches[0];
+            var to = torches[^1];
+            var route = new (int X, int Y)[cave.CellCount];
+            var found = pathfinder.FindPath(from, to, route, out int routeLength, out int routeCost, allowDiagonal: true);
+            pathfinder.FindPath(from, to, Span<(int X, int Y)>.Empty, out _, out int jumpCost, allowDiagonal: true, uniformCost: true);
+            pathfinder.BuildFlowField(new[] { to });
+
+            Console.WriteLine($"\nPathfinding from torch {from} to torch {to}: A* {found}, {routeLength} cells, cost {routeCost}; jump point search cost {jumpCost}");
+            Console.WriteLine("  A* route (*) on the left; flow field toward the goal (G) on the right:");
+            for (int y = cave.Height - 1; y >= 0; y--)
+            {
+                var routeLine = new char[cave.Width];
+                var flowLine = new char[cave.Width];
+                for (int x = 0; x < cave.Width; x++)
+                {
+                    routeLine[x] = cave[x, y] ? '#' : Array.IndexOf(route, (x, y), 0, routeLength) >= 0 ? '*' : ' ';
+                    pathfinder.TryGetFlowStep(x, y, out int stepX, out int stepY);
+                    flowLine[x] = cave[x, y] ? '#' : (x, y) == to ? 'G' : stepX > 0 ? '>' : stepX < 0 ? '<' : stepY > 0 ? '^' : stepY < 0 ? 'v' : ' ';
+                }
+                Console.WriteLine($"  {new string(routeLine)}   {new string(flowLine)}");
             }
 
             var weather = new MarkovChain<string>();

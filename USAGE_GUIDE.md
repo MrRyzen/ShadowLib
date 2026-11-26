@@ -15,6 +15,7 @@ This document is the canonical reference for using ShadowLib. It is written for 
 | `ShadowLib.RNG.Noise` | Simplex noise for terrain, density fields, fBm-textured maps. |
 | `ShadowLib.RNG.Utilities.ScalingCurve` | Level-driven progression curves (XP, damage scaling, drop weights). |
 | `ShadowLib.Spatial` | 2D grids, scalar fields, polyomino shapes, and a 3D inventory box that wears out. |
+| `ShadowLib.Spatial.Pathfinding` | A*, Jump Point Search and flow fields on a grid; allocation-free and Burst-ready. |
 | `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation, random walks, spaced placement, cellular automata. |
 | `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc condition strings (`ConditionEvaluator`), e.g. to drive a table's influence from data. |
 
@@ -555,6 +556,76 @@ int pockets = pack.FindPockets(pocketIds);   // which living cells still form on
 
 ---
 
+### Pathfinding — A*, Jump Point Search and flow fields
+
+Three searches over the same map format, in `ShadowLib.Spatial.Pathfinding`. Pick by load:
+
+| You have | Use |
+|---|---|
+| Units with their own goals on terrain with different costs | A* (`uniformCost: false`, the default) |
+| Walkable/blocked maps made of rooms, corridors or caves | Jump Point Search (`uniformCost: true`) |
+| Many agents heading for the same goal or goals | A flow field, built once and read by every agent |
+
+#### With a `Grid2D`
+
+```csharp
+using ShadowLib.Spatial.Pathfinding;
+
+var pathfinder = new GridPathfinder(grid.Width, grid.Height);
+pathfinder.Bake(grid, cell => cell.IsOccupied ? (byte)0 : cell.MoveCost);   // 0 = blocked, 1-255 = cost to enter
+
+Span<(int X, int Y)> path = stackalloc (int X, int Y)[256];
+PathStatus status = pathfinder.FindPath((2, 3), (40, 17), path, out int length, out int cost, allowDiagonal: true);
+if (status == PathStatus.Found)
+    foreach (var (x, y) in path[..length]) { /* walk it */ }
+
+pathfinder.BuildFlowField(stackalloc[] { (40, 17) }, allowDiagonal: true);
+if (pathfinder.TryGetFlowStep(agentX, agentY, out int stepX, out int stepY))
+    MoveAgent(stepX, stepY);
+```
+
+- `PathStatus.NoPath` means the start or goal is blocked or nothing connects them. `PathBufferTooSmall` means a path exists but does not fit: `length` then holds the size needed, and nothing was written. Pass an empty span to ask only "is it reachable, and at what cost".
+- The pathfinder does not watch the grid. After the grid changes, call `Bake` again, or `SetCost(x, y, cost)` for the cells that changed. Changing costs makes the flow field stale: `TryGetFlowStep` returns false until `BuildFlowField` runs again.
+- One `GridPathfinder` is for one thread. It allocates its buffers on first use and never after.
+
+#### Costs and movement
+
+- A step costs `GridPathing.OrthogonalStep` (10) or `GridPathing.DiagonalStep` (14) times the cost of the cell being entered. The cell you start on is free. Everything is integer maths, so results are identical on every platform and Burst float mode.
+- Movement is four-way unless you pass `allowDiagonal: true`. A diagonal step needs both cells it passes between to be walkable, so paths never squeeze past a corner.
+- Jump Point Search ignores weights: any non-zero cell costs 1. It returns the full cell-by-cell path, like A*.
+- A route whose total cost would not fit in an `int` is reported as `NoPath`.
+
+#### Which is faster
+
+Measured on a 512x512 map in plain .NET (`GridPathfindingBenchmark`, eight-way, per query): on a map of 32x32 rooms with one door per wall, A* 1.8 ms and JPS 0.09 ms; on generated caves, A* 0.68 ms and JPS 0.24 ms; on a completely open map, A* 0.05 ms and JPS 0.39 ms. So use JPS for rooms, corridors and caves, and A* for wide-open ground or weighted terrain. A flow field for the whole map took 13 to 30 ms to build; reading it is one array lookup per agent.
+
+#### In jobs / Burst
+
+The static functions take spans and plain integers, so a Burst job can call them directly. Cells are indices (`y * width + x`). Give each worker its own scratch; any number of workers can read the same cost map.
+
+```csharp
+[BurstCompile]
+struct FindPathJob : IJob
+{
+    [ReadOnly] public NativeArray<byte> Costs;      // shared, read-only
+    public NativeArray<int> Scratch;                // GridAStar.ScratchLength(cellCount), zeroed once, one per worker
+    public NativeArray<int> Path;
+    public NativeArray<int> Result;                 // [0] status, [1] length, [2] cost
+    public int Width, Height, Start, Goal;
+
+    public void Execute()
+    {
+        var status = GridAStar.FindPath(Costs.AsReadOnlySpan(), Width, Height, Start, Goal, allowDiagonal: true,
+            Scratch.AsSpan(), Path.AsSpan(), out int length, out int cost);
+        Result[0] = (int)status; Result[1] = length; Result[2] = cost;
+    }
+}
+```
+
+- `GridJumpPointSearch.FindPath` has the same signature. `GridFlowField.Build` fills a `distances` span (`int.MaxValue` = cannot reach a goal) and a `directions` span (0 E, 1 W, 2 N, 3 S, 4 NE, 5 NW, 6 SE, 7 SW, `GridFlowField.NoDirection` on goals and unreachable cells); `GridFlowField.NextCell`, `StepX` and `StepY` decode a direction.
+- A scratch buffer is reused across queries without clearing. It may be reused on a different map size or by the other search; it then clears itself once.
+- Spans cannot be job fields. Keep `NativeArray` fields and call `.AsSpan()` inside `Execute`.
+
 ## Procedural
 
 ### `BinPacker<TOccupant>`
@@ -793,7 +864,10 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate` / `Polycube.Generate` returning a `List` of positions — they return the `Polyomino` / `Polycube` struct. Their `max` limits are bounding-box sizes, not coordinates, and there is no per-axis bias parameter.
 - `RandomWalk.Generate(rng, length, bounds: (w, h), bias: new DirectionBias(forward, up, down))` — that was the roadmap sketch. The real call takes `width`, `height`, `start` and a four-weight `DirectionBias(right, left, up, down)`; up is +Y. There is no self-avoiding or eight-direction walk.
-- A* / pathfinding on `Grid2D`, BSP, WFC, maze generation — roadmap-only. Do not write code that calls these.
+- BSP, WFC, maze generation — roadmap-only. Do not write code that calls these.
+- `grid.FindPath(...)`, `Grid2D.AStar`, a pathfinding delegate for walkability, float costs, or a `List` of nodes — none exist. Pathfinding is `GridPathfinder` (managed, (x, y) tuples) or the static `GridAStar` / `GridJumpPointSearch` / `GridFlowField` (cell indices, spans). Costs are bytes (0 = blocked); results are a `PathStatus` plus `out` length and cost.
+- A ShadowLib `IJob`, `NativeArray` overload or ECS system for pathfinding — there is none. Write the job yourself and pass `nativeArray.AsSpan()` into the static functions.
+- Pathfinding on `SpatialGraph3D` or `FieldGrid` — not supported.
 - `SpacedPlacement.Place` guaranteeing `count` results, or finding the best possible spread — it is a single greedy pass and may return fewer. It returns `T[]`, not a `List`.
 - `CellularAutomata` with Game-of-Life style exact-count rules (B3/S23), or working on `Grid2D` — it takes two "at least N neighbours" thresholds and a `FieldGrid<bool>`.
 - `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
