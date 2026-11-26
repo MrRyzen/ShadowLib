@@ -159,5 +159,156 @@ namespace ShadowLib.Tests
             Assert.IsTrue(pack.Contains("crate"));
             Assert.Throws<ArgumentException>(() => pack.Place(1, 0, 0, "CRATE", Polycube.Single));
         }
+
+        [Test]
+        public void TryKill_ReportsTheItem_AndLeavesItInPlace()
+        {
+            var pack = FullPack();
+            pack.Place(0, 0, 0, "crate", Crate);
+
+            Assert.IsTrue(pack.TryKill(1, 1, 1, out var cell));
+            Assert.AreEqual((1, 1, 1), (cell.X, cell.Y, cell.Layer));
+            Assert.IsTrue(cell.WasOccupied);
+            Assert.AreEqual("crate", cell.Occupant);
+
+            Assert.IsFalse(pack.IsAlive(1, 1, 1));
+            Assert.IsTrue(pack.Exists(1, 1, 1));
+            Assert.AreEqual((24, 23), (pack.ExistingCount, pack.AliveCount));
+            Assert.IsTrue(pack.Contains("crate"));
+            Assert.IsTrue(pack.IsOccupied(1, 1, 1));
+            Assert.IsTrue(pack.TryGetOccupant(1, 1, 1, out string still));
+            Assert.AreEqual("crate", still);
+            Assert.AreEqual(8, pack.GetCells("crate", new (int X, int Y, int Layer)[8]));
+        }
+
+        [Test]
+        public void TryKill_EmptyCell_TwiceAndMissing()
+        {
+            var pack = new SpatialGraph3D<string>(4, 3, 2);
+            pack.AddCell(0, 0, 0);
+            Assert.IsTrue(pack.TryKill(0, 0, 0, out var cell));
+            Assert.IsFalse(cell.WasOccupied);
+            Assert.IsNull(cell.Occupant);
+            Assert.IsFalse(pack.TryKill(0, 0, 0, out _));
+            Assert.IsFalse(pack.TryKill(1, 0, 0, out _));
+            Assert.IsFalse(pack.TryKill(-1, 0, 0, out _));
+            Assert.AreEqual(0, pack.AliveCount);
+        }
+
+        [Test]
+        public void DeadCell_RejectsPlacement_AndAFreedItemCannotReturn()
+        {
+            var pack = FullPack();
+            pack.Place(0, 0, 0, "crate", Crate);
+            pack.TryKill(1, 1, 1, out _);
+            pack.TryKill(3, 2, 0, out _);
+            Assert.IsFalse(pack.CanPlace(3, 2, 0, Polycube.Single));
+
+            Assert.IsTrue(pack.Free("crate"));
+            Assert.IsFalse(pack.IsOccupied(1, 1, 1));
+            Assert.IsFalse(pack.IsAlive(1, 1, 1));
+            Assert.AreEqual(22, pack.AliveCount);
+            Assert.IsFalse(pack.CanPlace(0, 0, 0, Crate));
+            Assert.IsTrue(pack.Place(2, 0, 0, "crate", Crate));
+        }
+
+        [Test]
+        public void Repair_BringsACellBack_WithItsItem()
+        {
+            var pack = FullPack();
+            pack.Place(0, 0, 0, "crate", Crate);
+            pack.TryKill(0, 0, 0, out _);
+            Assert.IsTrue(pack.Repair(0, 0, 0));
+            Assert.IsTrue(pack.IsAlive(0, 0, 0));
+            Assert.IsTrue(pack.IsOccupied(0, 0, 0));
+            Assert.AreEqual(24, pack.AliveCount);
+            Assert.IsFalse(pack.Repair(0, 0, 0));
+            Assert.IsFalse(pack.Repair(9, 9, 9));
+            var sparse = new SpatialGraph3D<string>(2, 1, 1);
+            Assert.IsFalse(sparse.Repair(0, 0, 0));
+        }
+
+        [Test]
+        public void AddingCells_NeverRevivesADeadOne()
+        {
+            var pack = FullPack();
+            pack.TryKill(2, 1, 0, out _);
+            Assert.IsFalse(pack.AddCell(2, 1, 0));
+            Assert.AreEqual(0, pack.AddPocket(Polycube.FromBox(4, 3, 2), 0, 0, 0));
+            Assert.IsFalse(pack.IsAlive(2, 1, 0));
+        }
+
+        [Test]
+        public void TryKillRandom_DrawsOnce_ByRank_UntilNothingIsLeft()
+        {
+            var pack = FullPack();
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+            var killed = new HashSet<int>();
+
+            for (int alive = 24; alive > 0; alive--)
+            {
+                int rank = reference.Range(0, alive);
+                int expected = -1;
+                for (int index = 0, seen = 0; index < pack.Volume; index++)
+                {
+                    var (x, y, layer) = pack.GetPosition(index);
+                    if (pack.IsAlive(x, y, layer) && seen++ == rank) { expected = index; break; }
+                }
+
+                Assert.IsTrue(pack.TryKillRandom(rng, out var cell));
+                Assert.AreEqual(expected, pack.GetIndex(cell.X, cell.Y, cell.Layer));
+                Assert.IsTrue(killed.Add(expected));
+            }
+
+            Assert.AreEqual(0, pack.AliveCount);
+            Assert.IsFalse(pack.TryKillRandom(rng, out _));
+            Assert.AreEqual(reference.NextUInt(), rng.NextUInt());
+            Assert.Throws<ArgumentNullException>(() => pack.TryKillRandom(null!, out _));
+        }
+
+        [Test]
+        public void TryKillRandom_ReplaysForTheSameSeed_AndDoesNotAllocate()
+        {
+            var a = FullPack();
+            var b = FullPack();
+            var rngA = new Xoshiro128StarStar(123UL);
+            var rngB = new Xoshiro128StarStar(123UL);
+            a.TryKillRandom(rngA, out _);
+            b.TryKillRandom(rngB, out _);
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 20; i++)
+            {
+                a.TryKillRandom(rngA, out var cellA);
+                b.TryKillRandom(rngB, out var cellB);
+                if ((cellA.X, cellA.Y, cellA.Layer) != (cellB.X, cellB.Y, cellB.Layer)) Assert.Fail("diverged");
+            }
+            Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
+
+        [Test]
+        public void StructOccupant_DefaultValue_IsARealItem()
+        {
+            var pack = new SpatialGraph3D<int>(1, 1, 1);
+            pack.AddCell(0, 0, 0);
+            Assert.IsTrue(pack.Place(0, 0, 0, 0, Polycube.Single));
+            Assert.IsTrue(pack.IsOccupied(0, 0, 0));
+            Assert.IsTrue(pack.Contains(0));
+            Assert.IsTrue(pack.TryKill(0, 0, 0, out var cell));
+            Assert.IsTrue(cell.WasOccupied);
+            Assert.AreEqual(0, cell.Occupant);
+        }
+
+        [Test]
+        public void SavedState_IsRebuilt_CellsThenItemsThenDeadCells()
+        {
+            var pack = new SpatialGraph3D<string>(4, 3, 2);
+            pack.AddPocket(Polycube.FromBox(4, 3, 2), 0, 0, 0);
+            pack.Place(0, 0, 0, "crate", Crate);
+            pack.TryKill(1, 0, 0, out _);
+            Assert.IsTrue(pack.IsOccupied(1, 0, 0));
+            Assert.IsFalse(pack.IsAlive(1, 0, 0));
+        }
     }
 }

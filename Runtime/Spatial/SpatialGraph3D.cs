@@ -1,7 +1,37 @@
 namespace ShadowLib.Spatial
 {
+    using ShadowLib.RNG.Sources;
     using System;
     using System.Collections.Generic;
+
+    /// <summary>A cell that was killed in a <see cref="SpatialGraph3D{TOccupant}"/>, and what was on it.</summary>
+    /// <typeparam name="TOccupant">The item type.</typeparam>
+    public readonly struct KilledCell<TOccupant>
+    {
+        internal KilledCell(int x, int y, int layer, bool wasOccupied, TOccupant occupant)
+        {
+            X = x;
+            Y = y;
+            Layer = layer;
+            WasOccupied = wasOccupied;
+            Occupant = occupant;
+        }
+
+        /// <summary>Gets the column of the cell.</summary>
+        public int X { get; }
+
+        /// <summary>Gets the row of the cell.</summary>
+        public int Y { get; }
+
+        /// <summary>Gets the layer of the cell.</summary>
+        public int Layer { get; }
+
+        /// <summary>Gets whether an item was on the cell. Check this before reading <see cref="Occupant"/>.</summary>
+        public bool WasOccupied { get; }
+
+        /// <summary>Gets the item on the cell, which is still placed. Default when <see cref="WasOccupied"/> is false.</summary>
+        public TOccupant Occupant { get; }
+    }
 
     /// <summary>
     /// A width × height × layers box for a 3D inventory that wears out. Only cells that were added exist
@@ -233,6 +263,78 @@ namespace ShadowLib.Spatial
             for (int i = 0; i < count; i++)
                 buffer[i] = GetPosition(cells[i]);
             return count;
+        }
+
+        /// <summary>
+        /// Kills the living cell at the position. Nothing is moved or removed: an item on the cell stays
+        /// placed on all its cells, and the caller decides what to do with it. A dead cell rejects new placements.
+        /// </summary>
+        /// <param name="x">Column.</param>
+        /// <param name="y">Row.</param>
+        /// <param name="layer">Layer.</param>
+        /// <param name="cell">The cell that died and what was on it.</param>
+        /// <returns>False, changing nothing, if there is no living cell at the position.</returns>
+        public bool TryKill(int x, int y, int layer, out KilledCell<TOccupant> cell)
+        {
+            if (!IsAlive(x, y, layer))
+            {
+                cell = default;
+                return false;
+            }
+
+            cell = KillAt(GetIndex(x, y, layer));
+            return true;
+        }
+
+        /// <summary>
+        /// Kills one living cell chosen uniformly, with exactly one draw: <c>rng.Range(0, AliveCount)</c> picks
+        /// the living cell of that rank in ascending <see cref="GetIndex"/> order. Same seed, same damage.
+        /// </summary>
+        /// <param name="rng">The random number generator to draw from.</param>
+        /// <param name="cell">The cell that died and what was on it.</param>
+        /// <returns>False if no living cell is left; no random number is drawn in that case.</returns>
+        public bool TryKillRandom(IRandom rng, out KilledCell<TOccupant> cell)
+        {
+            if (rng == null) throw new ArgumentNullException(nameof(rng));
+            if (AliveCount == 0)
+            {
+                cell = default;
+                return false;
+            }
+
+            int rank = rng.Range(0, AliveCount);
+            for (int index = 0; index < _states.Length; index++)
+            {
+                if ((_states[index] & CellState.Alive) != 0 && rank-- == 0)
+                {
+                    cell = KillAt(index);
+                    return true;
+                }
+            }
+
+            throw new InvalidOperationException("AliveCount is out of step with the cell states.");
+        }
+
+        /// <summary>Brings a dead cell back to life. An item still on it is untouched.</summary>
+        /// <returns>True only if the cell exists and was dead.</returns>
+        public bool Repair(int x, int y, int layer = 0)
+        {
+            if (!Exists(x, y, layer) || IsAlive(x, y, layer))
+                return false;
+
+            _states[GetIndex(x, y, layer)] |= CellState.Alive;
+            AliveCount++;
+            return true;
+        }
+
+        private KilledCell<TOccupant> KillAt(int index)
+        {
+            _states[index] &= ~CellState.Alive;
+            AliveCount--;
+
+            var (x, y, layer) = GetPosition(index);
+            bool occupied = (_states[index] & CellState.Occupied) != 0;
+            return new KilledCell<TOccupant>(x, y, layer, occupied, occupied ? _occupants[index] : default!);
         }
 
         private bool Has(int x, int y, int layer, CellState flag)
