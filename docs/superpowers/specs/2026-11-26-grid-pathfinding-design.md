@@ -36,7 +36,7 @@ Movement is four-way by default, eight-way behind a flag.
 
 ## Found during the build
 
-- **`Span<byte>.Fill` is miscompiled by Burst 1.8.25** (four bytes written per element, overrunning the buffer). The core uses plain loops instead of `Fill` / `Clear` / `CopyTo`. Managed .NET never showed it; only the Unity Burst test did.
+- **`Span<byte>.Fill` is miscompiled by Burst 2.0.0** (four bytes written per element, overrunning the buffer). The core uses plain loops instead of `Fill` / `Clear` / `CopyTo`. Managed .NET never showed it; only the Unity Burst test did.
 - **JPS is not faster everywhere.** Measured on 512x512, eight-way, plain .NET: rooms with doors A* 1.8 ms vs JPS 0.09 ms; caves 0.68 vs 0.24; noise 30 % 2.9 vs 1.8; fully open 0.05 vs 0.39. A* with its tie-break walks almost straight across open ground, while JPS scans whole rows and columns. The docs say when to use which.
 - The scratch has a two-int header (generation, cell count) so a scratch reused on another map size clears itself instead of returning stale data. A* and JPS share the format, so one scratch serves both with no clearing between them.
 - `GridPathfinder.Costs` is read-only; `EditCosts()` hands out the writable span and marks the flow field stale. A span kept from before a flow-field build can still change costs unnoticed, and the docs say not to keep it.
@@ -45,7 +45,7 @@ Movement is four-way by default, eight-way behind a flag.
 ## Constraints
 
 - `netstandard2.1`, no `UnityEngine`, no NuGet references.
-- Burst accepts `Span<T>` / `ReadOnlySpan<T>` inside jobs and static methods but not as job fields or across the managed boundary. So a job holds `NativeArray<T>` fields and passes `array.AsSpan()` into the core. Verified against the Burst 1.8 docs; ShadowLab has Burst 1.8.25. The first build task proves it with a real Burst job before anything else is built on it.
+- Burst accepts `Span<T>` / `ReadOnlySpan<T>` inside jobs and static methods but not as job fields or across the managed boundary. So a job holds `NativeArray<T>` fields and passes `array.AsSpan()` into the core. Verified against the Burst 1.8 docs; ShadowLab has Burst 2.0.0. The first build task proves it with a real Burst job before anything else is built on it.
 
 ## Shape of the solution
 

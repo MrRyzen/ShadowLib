@@ -6,7 +6,7 @@
 
 **Architecture:** Static span-based functions in `ShadowLib.Spatial.Pathfinding` share one internal indexed binary heap and one set of direction helpers. `GridPathfinder` is a managed class that owns buffers and converts `(x, y)` to indices.
 
-**Tech Stack:** C# `netstandard2.1`, NUnit, Unity Burst 1.8.25 for the EditMode checks.
+**Tech Stack:** C# `netstandard2.1`, NUnit, Unity Burst 2.0.0 for the EditMode checks.
 
 **Superseded in part:** the scratch header is two ints with no algorithm id, tests live flat in `Tests/Runtime/`, and `GridPathfinder.Costs` became read-only with `EditCosts()`; the spec's "Found during the build" section has the final state.
 
