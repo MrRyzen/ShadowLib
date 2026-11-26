@@ -161,6 +161,8 @@ struct ChunkJob : IJobParallelFor
 
 So for replay across Burst and managed code, leave `FloatMode` at its default (or use `Deterministic`), or use only the integer and `NextFloat` / `NextDouble` draws in `Fast` jobs. Your own float math is subject to the same rule: a bound like `0.37f + index * 0.011f` computed once inside a Burst job and once in managed code can differ in the last bit, which then changes `Range(min, max)`. Compute such inputs in one place and pass them in.
 
+What has been compared bit for bit (2026-11-26, one x64 machine, Unity 6000.6, Burst 2.0.0): raw draws, seeding, orchestrator streams and saves, every distribution, noise, curves, the shape and map generators and the pathfinders all matched across Windows .NET 8, Linux .NET 8 and 9, the Unity editor, and built Windows and Linux players on both Mono and IL2CPP. Nothing has been run on ARM. `Tests/Runtime/DeterminismFingerprint.cs` is the code that was hashed; run its `WriteFingerprint` test on two runtimes and compare the files to repeat the check.
+
 This check lives in a Unity project, not in this repo's .NET test suite, which only proves the struct is unmanaged and matches the class bit for bit. IL2CPP player builds were not checked.
 
 ### 5. Pass `IRandom` down — don't reach for the orchestrator from leaves
@@ -417,6 +419,8 @@ var xp        = ScalingCurve.Exponential(start: 100f, rate: 0.15f);
 var damage    = ScalingCurve.LinearClamped(start: 10f, rate: 2f, cap: 100f);
 var rarity    = ScalingCurve.Logarithmic(start: 1f, rate: 0.5f);
 var dropTier  = ScalingCurve.Stepped((1, 10f), (5, 20f), (10, 30f));
+// Linear, Exponential and Stepped give the same bits on every platform.
+// Logarithmic uses MathF.Log, which is not guaranteed to: do not feed it into anything that must replay across Windows and Linux.
 
 float xpReq = xp.Evaluate(playerLevel);
 float dmg   = damage.Evaluate(playerLevel);

@@ -94,23 +94,13 @@ New this session:
 
 The roadmap pass is finished (BSP, WFC and maze generation are deferred until the user asks). What is left is the list of things the 2026-11-26 measurements found. The user asked for them to be written down here; **none has been started, and the user has not yet said to start any of them.** Ask which to take first, or take them in this order.
 
-### To fix (found by the speed and determinism runs)
+### Fixed on 2026-11-26 (the user said "some fixes"; all three were done)
 
-1. **`DynamicWeightTable<T>.Sample` is slow.** Unity editor, Mono, 10 items, plain table with no influence, stock or repeat prevention: about 210 ns per pick. On the same harness `AliasTable<T>.Sample` took 17 ns and a hand-written cumulative loop about 41-46 ns. So a plain table pays roughly five times the cost of the simplest correct code for features it is not using.
-   - Not profiled. First step is to profile `Sample` / `TrySample` and the effective-weight pass in `Runtime/RNG/Distributions/DynamicWeightTable.cs` before changing anything.
-   - Likely shape of the fix: a fast path when no item has influence, stock or a disabled flag and `PreventRepeat` is off (cache the total; one cumulative walk over plain weights).
-   - Must hold: `DynamicWeightTableTests.Sample_PlainTable_SequenceIsPinned` unchanged; exactly one `rng.NextFloat()` per picked item and none when nothing is pickable; no allocation per pick; all influence sources read before any mutation or draw; the fingerprint rows `DynamicWeightTable: plain picks` and `DynamicWeightTable: influence + stock + repeat prevention` unchanged on .NET and Unity.
-   - Measure with `RngSpeedBenchmark.cs` in ShadowLab before and after.
+1. **`DynamicWeightTable<T>.Sample`**: entries moved from `List<Entry>` to an array (no struct copies), plus a fast path for plain tables (no influence, stock, disabled item, and `PreventRepeat` off) over a cached weight array and total, rebuilt lazily after any mutator sets `_plainCacheIsStale`. Unity editor: 210 ns to 48 ns per pick from 10 items (hand-written loops 43-47 ns). .NET 8: 30 ns to 14 ns; 100 items 237 ns to 51 ns; with a feature in use 33 ns to 26 ns. Pick sequences and fingerprint unchanged. **Any new mutator on the table must set `_plainCacheIsStale`**; `Sample_AfterEveryKindOfChange_NeverUsesStaleWeights` is the guard.
+2. **`NextFloat` / `NextDouble`**: convert through `int` / `long` instead of `uint` / `ulong`. Same bits. Unity editor `NextFloat`: class 7.31 to 4.94 ns, struct 6.70 to 3.86 ns (`Unity.Mathematics.Random` 5.01 ns in the same run).
+3. **`ScalingCurve.Exponential`**: `MathF.Pow` replaced by exponentiation by squaring in `double`. In the 500-level sample no Windows value changed and Linux now matches Windows bit for bit. `Logarithmic` was left on `MathF.Log` (it matched in the sample; the usage guide says it is not guaranteed).
 
-2. **`NextFloat` is slow in managed code.** Unity editor, Mono, per draw: class 7.31 ns, through `IRandom` 7.55 ns, struct 6.70 ns, against 4.56 ns for `Unity.Mathematics.Random` and 7.05 ns for `System.Random.NextDouble()`. Under Burst ours is faster (0.84 ns against 1.20 ns), so this is a managed-only problem.
-   - Not profiled. The suspect is the unsigned-to-float conversion in `(NextUInt() >> 8) * INV_24BIT` (`Runtime/RNG/Sources/Xoshiro128StarStar.cs`, in the `Xoshiro128` struct): Mono converts `uint` to `float` slowly. The shifted value is always below 2^24, so casting it to `int` first gives the same float bits.
-   - Must hold: every `ShadowLib Next*` and `Range*` fingerprint row unchanged on .NET 8, Unity Mono and IL2CPP; `XoshiroBurstTests` still 4/4 (Burst output identical to managed in default and deterministic float modes); the class stays a thin wrapper over the struct.
-   - `NextDouble` and `Range(float)` build on the same conversion pattern; check whether they gain too.
-
-3. **`ScalingCurve.Exponential` is not bit-identical between Windows and Linux.** 1 of 500 values (level 275 of `Exponential(100f, 0.137f)`) differs by one float step; every Linux runtime tried agrees with the others, every Windows runtime with each other. Cause: `MathF.Pow` goes to the platform C library. **Needs the user's go-ahead** because the fix changes a few last bits of today's values (changelog entry).
-   - Fix: the level is an integer, so compute `(1 + rate)^level` by repeated multiplication in a fixed order (exponentiation by squaring), in `double`, then round once.
-   - `ScalingCurve.Logarithmic` matched in the 500-value sample but uses `MathF.Log`, which has the same exposure. A deterministic replacement needs its own algorithm; decide with the user whether to do it or document the limit.
-   - Guard: the fingerprint row `ScalingCurve exponential and logarithmic (MathF.Pow / Log)` must become identical on Windows and Linux.
+Still open from that list: managed `Range(int)` is about twice the cost of `Unity.Mathematics.Random.NextInt(min, max)` because it does two `%` per call to stay bias-free; a multiply-shift method would be faster but would change every existing sequence, so it was not touched.
 
 ### Known limits found, to document rather than fix (unless the user says otherwise)
 

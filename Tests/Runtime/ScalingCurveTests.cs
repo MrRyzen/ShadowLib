@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using ShadowLib.RNG.Utilities;
 
@@ -33,6 +34,47 @@ namespace ShadowLib.Tests
             Assert.AreEqual(20f, curve.Evaluate(4), 1e-5f);   // 4 < 5 → 20
             Assert.AreEqual(30f, curve.Evaluate(5), 1e-5f);   // reached 5, 5 < 10 → 30
             Assert.AreEqual(30f, curve.Evaluate(99), 1e-5f);  // past all → last
+        }
+
+        [Test]
+        public void Exponential_StaysWithinOneFloatStepOfThePowerFunction_AndIsExactAtLevelsZeroAndOne()
+        {
+            var curve = ScalingCurve.Exponential(100f, 0.137f);
+
+            Assert.AreEqual(100f, curve.Evaluate(0));
+            Assert.AreEqual(100f * (1f + 0.137f), curve.Evaluate(1));
+            for (int level = -40; level < 500; level++)
+            {
+                double expected = 100.0 * Math.Pow((double)(1f + 0.137f), level);
+                if (expected > float.MaxValue)
+                {
+                    Assert.IsTrue(float.IsPositiveInfinity(curve.Evaluate(level)), $"level {level}");
+                    continue;
+                }
+
+                Assert.AreEqual(expected, curve.Evaluate(level), Math.Abs(expected) * 3e-7, $"level {level}");
+            }
+        }
+
+        [Test]
+        public void Exponential_ValuesArePinned_SoEveryPlatformMustProduceTheSameBits()
+        {
+            var curve = ScalingCurve.Exponential(100f, 0.137f);
+            var levels = new[] { 2, 7, 64, 275, 499, -3 };
+            var bits = new int[levels.Length];
+            for (int i = 0; i < levels.Length; i++)
+                bits[i] = BitConverter.SingleToInt32Bits(curve.Evaluate(levels[i]));
+
+            CollectionAssert.AreEqual(new[] { 1124157155, 1131784019, 1219812295, 1547678579, 1896271371, 1116213458 }, bits);
+        }
+
+        [Test]
+        public void Exponential_HandlesShrinkingCurvesCapsAndExtremeLevels()
+        {
+            Assert.AreEqual(12.5f, ScalingCurve.Exponential(100f, -0.5f).Evaluate(3));
+            Assert.AreEqual(250f, ScalingCurve.Exponential(100f, 1f, 250f).Evaluate(10));
+            Assert.IsTrue(float.IsPositiveInfinity(ScalingCurve.Exponential(1f, 1f).Evaluate(int.MaxValue)));
+            Assert.AreEqual(0f, ScalingCurve.Exponential(1f, 1f).Evaluate(int.MinValue));
         }
     }
 }

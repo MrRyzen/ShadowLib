@@ -59,6 +59,9 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ### Fixed
 
+- `ScalingCurve.Exponential` now gives the same bits on every platform. It used `MathF.Pow`, whose last bit differs between Windows and Linux (1 of 500 sampled values was one float step apart). It now multiplies in a fixed order. Values on Windows did not change in the 500 levels sampled; a Linux value can move by one float step. `ScalingCurve.Logarithmic` still uses `MathF.Log`: it matched across platforms in the same sample, but is not guaranteed to.
+- `DynamicWeightTable<T>.Sample` is several times faster: a table with no influence, stock, disabled items or repeat prevention now picks in a single pass over cached weights (Unity editor: about 210 ns to 48 ns per pick from 10 items), and the other cases no longer copy entries. Pick sequences are unchanged.
+- `NextFloat` and `NextDouble` are faster on Mono (Unity editor: `NextFloat` about 7.3 ns to 4.9 ns). Same output bits.
 - `ConditionEvaluator` matched custom function names with the current culture, so `CONTAINS(...)` / `DISTANCE(...)` evaluated to `false` under Turkish locales. Matching is now culture-invariant.
 - `ConditionEvaluator` no longer blocks NCalc's built-in functions (`Max`, `Round`, `Abs`, ...), which previously always evaluated to `false`.
 

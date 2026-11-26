@@ -63,13 +63,28 @@ namespace ShadowLib.RNG.Utilities
             {
                 // Explicit casts pin every step to single precision on runtimes that evaluate float math in double.
                 CurveType.Linear => (float)(_start + (float)(_rate * level)),
-                CurveType.Exponential => (float)(_start * (float)MathF.Pow((float)(1f + _rate), level)),
+                CurveType.Exponential => (float)(_start * IntegerPower((float)(1f + _rate), level)),
                 CurveType.Logarithmic => (float)(_start + (float)(_rate * (float)MathF.Log(level + 1))),
                 CurveType.Stepped => EvaluateStepped(level),
                 _ => throw new InvalidOperationException($"Unknown curve type: {_type}")
             };
 
             return _hasCap ? Math.Min(raw, _cap) : raw;
+        }
+
+        // multiplication only: MathF.Pow goes to the platform C library, whose last bit differs between Windows and Linux
+        private static float IntegerPower(float value, int exponent)
+        {
+            double result = 1.0;
+            double factor = value;
+            for (long remaining = Math.Abs((long)exponent); remaining > 0; remaining >>= 1)
+            {
+                if ((remaining & 1) != 0)
+                    result *= factor;
+                factor *= factor;
+            }
+
+            return (float)(exponent < 0 ? 1.0 / result : result);
         }
 
         private float EvaluateStepped(int level)
