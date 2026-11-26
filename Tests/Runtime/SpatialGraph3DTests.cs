@@ -284,7 +284,9 @@ namespace ShadowLib.Tests
                 b.TryKillRandom(rngB, out var cellB);
                 if ((cellA.X, cellA.Y, cellA.Layer) != (cellB.X, cellB.Y, cellB.Layer)) Assert.Fail("diverged");
             }
-            Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before);
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.AreEqual(0, allocated);
         }
 
         [Test]
