@@ -8,7 +8,7 @@ ShadowLib is a deterministic-RNG and procedural-generation toolkit for games. It
 RNG        deterministic streams, seeding, weighted/tiered/alias tables, dice, Markov chains, simplex noise
 Spatial    Grid2D, FieldGrid, Polyomino, ICell/ISpace contracts
 Procedural BinPacker (FirstFit / BestFit / BottomLeft / AutoSort), Markov name generation
-Optional   NCalc-driven weight modifiers and JSON modifier loading (opt-in)
+Optional   NCalc condition strings (opt-in)
 ```
 
 The library has zero engine references in `Runtime/` — `noEngineReferences: true`. It can be dropped into a Unity project as a UPM package or referenced as a NuGet package from any .NET tool.
@@ -114,7 +114,7 @@ For more, see [`USAGE_GUIDE.md`](./USAGE_GUIDE.md).
 │   ├── ShadowLib.asmdef          Main asmdef (no engine refs, no external deps)
 │   ├── ShadowLib.csproj          .NET project for build/test/pack
 │   ├── RNG/ Spatial/ Procedural/ Source modules
-│   └── Optional/                 Opt-in features (NCalc, System.Text.Json) — separate asmdef
+│   └── Optional/                 Opt-in features (NCalc) — separate asmdef
 ├── Tests/Runtime/                NUnit tests, dual-purpose (dotnet test + Unity Test Runner)
 ├── Samples~/BasicUsage/          Importable Unity sample
 ├── ShadowLib.Runner/             Plain .NET console smoke-test (not part of UPM package)
@@ -184,8 +184,8 @@ CI (`.github/workflows/ci.yml`) runs build+test on every push/PR. Release (`.git
 ## Known limitations
 
 - **Pre-1.0.** Names, signatures, namespaces may move. Sub-1.0 minor bumps can break.
-- **Opt-in modules need extra setup in Unity.** `Runtime/Optional/` (NCalc condition strings + JSON modifier loader) requires:
-  1. NCalc + System.Text.Json available in the project (NuGetForUnity is the easy path).
+- **Opt-in modules need extra setup in Unity.** `Runtime/Optional/` (NCalc condition strings) requires:
+  1. NCalc available in the project (NuGetForUnity is the easy path).
   2. The scripting define `SHADOWLIB_NCALC` set in `Project Settings → Player → Scripting Define Symbols`.
   Without these, the optional module is silently excluded from compilation. The core RNG/Spatial/Procedural modules work without any of this.
 - **Burst compatibility is checked by hand, not by CI.** `Xoshiro128` was verified under Burst 2.0.0 (Unity 6000.6) to match managed output bit for bit in the default and `Deterministic` float modes. Under `FloatMode.Fast`, `Range(float, float)` and `Range(double, double)` drift in the low bits; integer draws stay exact. IL2CPP player builds are unchecked. See the usage guide.

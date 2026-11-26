@@ -70,6 +70,43 @@ namespace ShadowLib.Runner
             Console.WriteLine($"  after save: {string.Join(", ", beforeLoad)}");
             Console.WriteLine($"  after load: {string.Join(", ", afterLoad)} (match: {beforeLoad.SequenceEqual(afterLoad)})");
 
+            var hero = new Hero();
+            var drain = new Punishment("Drain", 25);
+            var wheel = new EffectWheel<Punishment, Hero>();
+            wheel.Add(drain, 20f);
+            wheel.Add(new Punishment("Lucky Escape", 0), 15f);
+            wheel.Add(new Punishment("Scratch", 5), 15f);
+            wheel.SetInfluence(drain, min: 5f, max: 60f, () => hero.Corruption);
+            wheel.PreventRepeat = true;
+
+            Console.WriteLine("\nEffect wheel (Drain odds follow corruption):");
+            foreach (float corruption in new[] { -1f, 0f, 1f })
+            {
+                hero.Corruption = corruption;
+                Console.WriteLine($"  corruption {corruption,2}: Drain {wheel.GetProbability(drain):P0}");
+            }
+
+            var wheelRng = orchestrator.CreateRNG("effect-wheel");
+            for (int i = 0; i < 5; i++)
+            {
+                Punishment applied = wheel.SampleAndApply(wheelRng, hero);
+                Console.WriteLine($"  spin {i + 1}: {applied.Name} (health {hero.Health})");
+            }
+
+            var upgrades = new DynamicWeightTable<string>();
+            foreach (string upgrade in new[] { "Haste", "Armor", "Regen", "Crit", "Reach" })
+                upgrades.Add(upgrade, 1f);
+            var offer = new string[3];
+            int offered = upgrades.SampleDistinct(wheelRng, offer);
+            Console.WriteLine($"  upgrade offer: {string.Join(", ", offer[..offered])}");
+
+            var shop = new DynamicWeightTable<string>();
+            shop.Add("Unique Relic", 1f);
+            shop.SetStock("Unique Relic", 1);
+            bool first = shop.TrySample(wheelRng, out string? relic);
+            bool second = shop.TrySample(wheelRng, out _);
+            Console.WriteLine($"  stocked item: first pick {first} ({relic}), second pick {second} (sold out)");
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);
@@ -178,6 +215,32 @@ namespace ShadowLib.Runner
         public bool Equals(Item other) => Name == other.Name && Value == other.Value;
 
         public override string ToString() => $"{Name} (Value: {Value})";
+    }
+
+    public sealed class Hero
+    {
+        public int Health = 100;
+        public float Corruption;
+    }
+
+    public sealed class Punishment : IEffect<Hero>, IEquatable<Punishment>
+    {
+        public string Name { get; }
+        public int Damage { get; }
+
+        public Punishment(string name, int damage)
+        {
+            Name = name;
+            Damage = damage;
+        }
+
+        public void Apply(Hero target) => target.Health -= Damage;
+
+        public bool Equals(Punishment? other) => other != null && other.Name == Name;
+
+        public override bool Equals(object? obj) => Equals(obj as Punishment);
+
+        public override int GetHashCode() => Name.GetHashCode();
     }
 
     public class Cell<TOccupant> : ICell<TOccupant>

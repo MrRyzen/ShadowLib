@@ -14,8 +14,18 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - `Xoshiro128`: the xoshiro128** generator as an unmanaged struct for Unity jobs, Burst and ECS. Same output as `Xoshiro128StarStar` for the same seed, verified under Burst 2.0.0 in the default and `Deterministic` float modes (`FloatMode.Fast` changes the low bits of the float and double `Range` overloads only).
 - `Seeding.DeriveSeed64(ulong rootSeed, ulong index)`: arithmetic-only seed derivation, usable inside jobs.
 - `Orchestrator`'s stream and seed members are thread-safe. Generators remain single-threaded, and `Save` / `Load` must not overlap with draws from a `CreateRNG` stream on another thread.
+- `DynamicWeightTable<T>.SetInfluence(item, min, max, Func<float>)` / `ClearInfluence`: an external value from -1 to 1 moves an item's weight between `min` and `max`, read on every pick. The designed weight is never overwritten.
+- `DynamicWeightTable<T>.SetEnabled` / `IsEnabled`: take an item out of the pool without removing it.
+- `DynamicWeightTable<T>.SetStock` / `ClearStock` / `TryGetStock` / `Refill` / `RefillAll`: limited stock per item; a pick spends one unit.
+- `DynamicWeightTable<T>.PreventRepeat`, with `TryGetLastPicked` / `SetLastPicked` / `ClearLastPicked`: the last pick is left out of the next one, without an extra draw.
+- `DynamicWeightTable<T>.SampleDistinct(rng, Span<T>)`: several different items in one call.
+- `DynamicWeightTable<T>.TrySample` and `GetProbability`.
+- `IEffect<TTarget>` and `EffectWheel<TEffect, TTarget>` with `SampleAndApply(rng, target)`.
 
 ### Removed
+
+- **Breaking:** `DynamicWeightTable<T>.AddWeight`, `MultiplyWeight`, `ResetWeights`, `UniformWeights`, `NormalizeWeights`, `GetBaseWeight`, `TryGetBaseWeight` and `SetBaseWeight`, along with the base/dynamic weight split. For odds that change with game state use `SetInfluence`; to take an item out use `SetEnabled(item, false)` or `TryRemove`; for a permanent change use `SetWeight`.
+- **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` (namespace `ShadowLib.RNG.Modifiers`). Nothing in the library applied them. `ConditionEvaluator` stays and can drive an influence source. The library no longer uses `System.Text.Json`.
 
 - **Breaking:** static `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(context)`. Replace with `var orchestrator = new Orchestrator(seed);` and `orchestrator.CreateRNG(context)`. Streams from `CreateRNG` are unchanged for the same root seed and context.
 - **Breaking:** the implicit OS-entropy root seed. `Orchestrator` now always needs an explicit seed; pass `Seeding.GenerateSeed64()` for a non-repeatable run.
@@ -25,6 +35,9 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 - **Breaking:** `Orchestrator` is an instance class instead of a static one, so it can be owned by your own manager, one per world or save slot.
 - `Xoshiro128StarStar` is now a thin `IRandom` wrapper over `Xoshiro128`; its output is unchanged.
+- **Breaking:** `DynamicWeightTable<T>.Add` throws `ArgumentException` for an item that is already in the table (it used to add a second entry). This also applies to `TieredTable<T>.AddTier`.
+- **Breaking:** `DynamicWeightTable<T>.SetWeight` now sets the item's one designed weight; there is no separate base weight to reset to.
+- **Behavior change:** `DynamicWeightTable<T>.Sample` throws `InvalidOperationException` whenever nothing is pickable (all items disabled, out of stock or influenced to zero), not only when the table is empty. Results for existing tables with unique items are unchanged for the same seed.
 
 - **Behavior change:** `Seeding.DeriveSeed(uint, string)` now hashes the context with FNV-1a instead of summing its characters, so contexts that are anagrams of each other (`"chunk/1/2"` vs `"chunk/2/1"`) no longer collide. Seeds derived with the 32-bit overload differ from earlier previews; `DeriveSeed64` (and therefore `Orchestrator`) is unchanged.
 - **Behavior change:** `BinPacker.AutoSort` breaks ties between equally sized shapes by input order. Previously the order of ties depended on the runtime's unstable sort, so layouts with many same-sized items may differ from earlier previews.

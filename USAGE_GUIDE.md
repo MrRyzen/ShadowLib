@@ -16,7 +16,7 @@ This document is the canonical reference for using ShadowLib. It is written for 
 | `ShadowLib.RNG.Utilities.ScalingCurve` | Level-driven progression curves (XP, damage scaling, drop weights). |
 | `ShadowLib.Spatial` | 2D grids, scalar fields, polyomino shapes. |
 | `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation. |
-| `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc-driven dynamic weight modifiers + JSON-loaded modifier files. |
+| `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc condition strings (`ConditionEvaluator`), e.g. to drive a table's influence from data. |
 
 If you can't decide between modules, follow the dependency arrow: most things ultimately consume an `IRandom`, which comes from an **`Orchestrator`**. Start there.
 
@@ -233,9 +233,9 @@ The same generator as an unmanaged value type: no `IRandom`, no references, iden
 
 ## Distributions
 
-### `DynamicWeightTable<T>` — mutable weighted sampling
+### `DynamicWeightTable<T>` — weighted sampling that follows game state
 
-When weights change at runtime (buffs, gameplay state, modifiers).
+When odds depend on what is happening in the game (buffs, corruption, distance, limited stock).
 
 ```csharp
 var table = new DynamicWeightTable<string>();
@@ -243,15 +243,64 @@ table.Add("Common",    weight: 70f);
 table.Add("Uncommon",  weight: 25f);
 table.Add("Rare",      weight: 5f);
 
-string drop = table.Sample(rng);
+// Influence: luck runs from -1 to 1 and moves "Rare" between weight 1 and 50.
+// The table reads it on every pick; the designed weight (5) is never overwritten.
+table.SetInfluence("Rare", min: 1f, max: 50f, () => player.Luck);
 
-table.SetWeight("Rare", 50f);        // boosted by some buff (base weight untouched)
-string better = table.Sample(rng);
+table.SetEnabled("Uncommon", false);         // stays in the table, never picked
+table.SetStock("Rare", 2);                   // only two Rares until Refill
+table.PreventRepeat = true;                  // never the same item twice in a row
 
-table.ResetWeights();                // back to original base weights
+float rareOdds = table.GetProbability("Rare");   // 0..1, what the next Sample would use
+string drop = table.Sample(rng);                 // throws if nothing is pickable
+bool ok = table.TrySample(rng, out string maybe);
+
+var offer = new string[3];
+int count = table.SampleDistinct(rng, offer);    // up to 3 different items
 ```
 
-Maintains a **base** and **current** weight per entry. `ResetWeights()` restores base; `Add` always sets both.
+- **Influence.** `-1` gives `min`, `0` the designed weight, `+1` gives `max`, linear in between. Values outside `-1..1` are clamped and `NaN` counts as `0`. `min` may be `0`, which switches the item off at `-1`. The range must satisfy `0 <= min <= weight <= max`. `ClearInfluence(item)` removes it. The source must not call back into the same table.
+- **Designed weight.** `SetWeight(item, weight)` changes it permanently. There is no separate "current" weight to reset.
+- **Stock.** A pick spends one unit; at zero the item is unpickable until `Refill(item)` / `RefillAll()`. `ClearStock(item)` makes it unlimited again.
+- **Repeat prevention.** The last pick is left out of the next one unless it is the only pickable item. This does not re-roll, so it never costs an extra draw.
+- **`SampleDistinct`** returns how many items it wrote, which is fewer than requested when the pickable items run out. It reads each influence source once and only its first item is subject to repeat prevention.
+- **Determinism.** Every pick is exactly one `rng.NextFloat()`, and none when nothing is pickable, so the same seed with the same game state replays exactly.
+- **Items are unique.** `Add` throws `ArgumentException` for an item already in the table.
+
+Stock and the last pick are state the table does not save. Store and restore them yourself:
+
+```csharp
+// save
+bool stocked = table.TryGetStock("Rare", out int unitsLeft);
+bool hasLast = table.TryGetLastPicked(out string lastPick);
+
+// load
+if (stocked) table.SetStock("Rare", unitsLeft, maxUnits: 2);
+if (hasLast) table.SetLastPicked(lastPick);
+```
+
+### `EffectWheel<TEffect, TTarget>` — pick an effect and apply it
+
+A `DynamicWeightTable<TEffect>` whose items implement `IEffect<TTarget>`. Everything above (influence, stock, repeat prevention) works on it.
+
+```csharp
+public sealed class Punishment : IEffect<Player>, IEquatable<Punishment>
+{
+    public string Name;
+    public int Damage;
+    public void Apply(Player target) => target.Health -= Damage;
+    public bool Equals(Punishment other) => other != null && other.Name == Name;
+}
+
+var wheel = new EffectWheel<Punishment, Player>();
+wheel.Add(drain, weight: 20f);
+wheel.Add(luckyEscape, weight: 15f);
+wheel.SetInfluence(drain, min: 5f, max: 60f, () => player.Corruption);
+
+Punishment applied = wheel.SampleAndApply(rng, player);
+```
+
+The pick is committed (stock spent, last pick recorded) before `Apply` runs. Effects should be classes or stateless structs: a struct effect is applied on a copy.
 
 ### `AliasTable<T>` — immutable, O(1) sampling
 
@@ -279,7 +328,7 @@ string[] firstChest  = loot.Sample(rng, tier: 1, drops: 3);
 string[] bossChest   = loot.Sample(rng, tier: 2, drops: 2);
 ```
 
-Each tier is a `DynamicWeightTable<T>` under the hood — apply per-tier modifiers via `loot.GetTier(tier).SetWeight(...)`.
+Each tier is a `DynamicWeightTable<T>` under the hood, so influence, stock and the rest are available through `loot.GetTier(tier)`, for example `loot.GetTier(2).SetInfluence("Cleaver", 1f, 20f, () => player.Luck)`. A tier's items must be unique. `Sample(rng, tier, drops)` picks with replacement and throws if the tier runs out of pickable items part-way.
 
 ### `RandomBag<T>` — draw without replacement
 
@@ -531,7 +580,7 @@ gen.Train(listAsset.text.Split('\n')
 
 ## Optional module — opt-in features
 
-`Runtime/Optional/` holds the parts that depend on third-party assemblies (NCalc, System.Text.Json). It's a **separate asmdef** with `defineConstraints: ["SHADOWLIB_NCALC"]`.
+`Runtime/Optional/` holds the part that depends on a third-party assembly (NCalc). It's a **separate asmdef** with `defineConstraints: ["SHADOWLIB_NCALC"]`.
 
 To enable in Unity:
 
@@ -542,10 +591,7 @@ To enable in Unity:
 Then:
 
 ```csharp
-using ShadowLib.RNG.Modifiers;
 using ShadowLib.RNG.Utilities;
-
-var modifiers = ModifierLoader.LoadModifiers<string>("Assets/loot-modifiers.json");
 
 var ctx = new Dictionary<string, object> {
     ["PlayerLevel"] = 12,
@@ -553,10 +599,9 @@ var ctx = new Dictionary<string, object> {
 };
 var evaluator = new ConditionEvaluator();
 
-foreach (var mod in modifiers) {
-    if (evaluator.Evaluate(mod.Condition, ctx))
-        ApplyModifier(table, mod);
-}
+// A data-driven condition string deciding an item's influence.
+table.SetInfluence("Rare", min: 1f, max: 50f,
+    () => evaluator.Evaluate("PlayerLevel > 10 && Environment == 'Dungeon'", ctx) ? 1f : 0f);
 ```
 
 In a non-Unity .NET project this is always available — the .csproj pulls NCalc from NuGet directly, no opt-in needed.
@@ -608,7 +653,8 @@ Read this section before generating ShadowLib code.
    - Throwaway for a repeated event (each chest, each wave) → `orchestrator.Next("context")`.
    - Inside a Unity job / Burst → `new Xoshiro128(Seeding.DeriveSeed64(seed, index))` with `seed` from `orchestrator.DeriveSeed("context")`.
 2. **Need weighted picking?**
-   - Mutable weights → `DynamicWeightTable<T>`.
+   - Odds that follow game state, limited stock, no repeats, or several different picks → `DynamicWeightTable<T>`.
+   - Pick an effect and apply it → `EffectWheel<TEffect, TTarget>`.
    - Immutable + hot loop → `AliasTable<T>`.
    - Stratified by tier/rarity → `TieredTable<T>`.
    - Each item exactly once before repeats → `RandomBag<T>`.
@@ -641,7 +687,10 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate(rng, cellCount, compactness)` — listed in the roadmap as **pending**, not yet implemented.
 - `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, `SparseGraph<T>.FindPath`, `SparseGraph<T>.GetNodesInRange` — all roadmap-only. Do not write code that calls these.
-- `EffectWheel<,>`, `IEffect<>` — roadmap-only.
+- `DynamicWeightTable<T>.AddWeight` / `MultiplyWeight` / `ResetWeights` / `UniformWeights` / `NormalizeWeights` / `GetBaseWeight` / `SetBaseWeight` — removed. Use `SetInfluence` for odds that change with game state, `SetEnabled(item, false)` to take an item out, `SetWeight` for a permanent change.
+- `WeightModifier<T>`, `ModifierOperation`, `ModifierLoader`, the `ShadowLib.RNG.Modifiers` namespace — removed. `ConditionEvaluator` still exists.
+- An influence provider interface (`IProbabilityInfluenceProvider` or similar) — there is none; `SetInfluence` takes a `Func<float>`.
+- `DynamicWeightTable<T>` saving its own stock or last pick — it does not; see the save/load snippet in its section.
 - `IRandom.NextBool()` / `IRandom.Pick(...)` — not on the interface. Use `rng.Range(0, 2) == 0` and `RandomUtils.RandomSelect(list, rng)`.
 - `RandomUtils.Select(...)` — the method is named `RandomSelect`. There is also `RandomUtils.Chance(probability, rng)` and `RandomUtils.Shuffle(array, rng)` / `Shuffle(list, rng)`.
 - A `using ShadowLib;` namespace shortcut — there is no such namespace; use `ShadowLib.RNG`, `ShadowLib.Spatial`, etc. explicitly.

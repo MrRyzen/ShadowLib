@@ -15,7 +15,8 @@
 
 ### RNG Distributions
 
-- **`DynamicWeightTable<T>`** — Mutable weighted sampling with base/dynamic weight split, binary search selection, bulk operations (normalize, uniform, reset).
+- **`DynamicWeightTable<T>`** — Weighted sampling whose odds follow game state. Designed weight per item plus pull-based influence (`SetInfluence(item, min, max, Func<float>)`, read at pick time), enabled flags, depletable stock, repeat prevention, `SampleDistinct`, `TrySample` and `GetProbability`. One RNG draw per pick.
+- **`IEffect<TTarget>` + `EffectWheel<TEffect, TTarget>`** — A `DynamicWeightTable` of effects with `SampleAndApply(rng, target)`.
 - **`AliasTable<T>`** — O(1) weighted sampling via alias method. Immutable after construction.
 - **`TieredTable<T>`** — Tier-keyed collection of `DynamicWeightTable<T>` instances for level/rarity-gated loot.
 - **`RandomBag<T>`** — Shuffled draw-without-replacement bag with cycle-based auto-refill (opt-out) and manual `Refill()`.
@@ -27,11 +28,9 @@
 - **`ScalingCurve`** — Zero-alloc `Curve` struct with Linear, Exponential, Logarithmic, and Stepped evaluation + optional cap.
 - **`RandomUtils`** — Fisher-Yates shuffle (array + list), random select, probability chance roll.
 
-### RNG Modifiers
+### RNG Conditions (optional module)
 
-- **`WeightModifier<T>`** — Struct-based modifier with condition string, target, operation (Add/Multiply/Set), and stage ordering.
 - **`ConditionEvaluator`** — NCalc-based condition evaluation with custom functions (`contains`, `distance`, `count`).
-- **`ModifierLoader`** — JSON deserialization of `WeightModifier<T>` collections from config files.
 
 ### RNG Noise
 
@@ -62,23 +61,6 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ---
 
 ## Not Yet Implemented
-
-### IEffect\<TTarget\> + EffectWheel\<TEffect, TTarget\>
-
-Weighted effect selection + application. Combines `DynamicWeightTable` sampling with an `Apply()` call.
-
-```csharp
-public interface IEffect<TTarget>
-{
-    void Apply(TTarget target);
-}
-
-var wheel = new EffectWheel<PunishmentEffect, Player>();
-wheel.Add(new PunishmentEffect("Drain", 25), weight: 20f);
-wheel.Add(new PunishmentEffect("Lucky Escape", 1), weight: 15f);
-
-PunishmentEffect result = wheel.SampleAndApply(rng, player);
-```
 
 ### SparseGraph\<T\>
 
@@ -166,7 +148,7 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 5 | `Polyomino` (struct) | — | Low | **Done** |
 | 6 | `BinPacker<T>` | `ISpace`, `Polyomino` | Medium | **Done** |
 | 7 | `SimplexNoise` | `IRandom` | Medium | **Done** |
-| 8 | `IEffect<T>` + `EffectWheel<T,T>` | `DynamicWeightTable` | Low | Pending |
+| 8 | `IEffect<T>` + `EffectWheel<T,T>` | `DynamicWeightTable` | Low | **Done** |
 | 9 | `SparseGraph<T>` | — | Medium | Pending |
 | 10 | Connected Component Analysis | `SparseGraph` | Low | Pending |
 | 11 | `Polyomino Generator` | `IRandom` | Low | Pending |

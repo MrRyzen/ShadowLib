@@ -94,7 +94,7 @@ Pre-release tags use `vX.Y.Z-preview.N`. The release will be flagged as a pre-re
 
 ## Don't
 
-- Don't add `Newtonsoft.Json`. We use `System.Text.Json` and even that is in the `Optional/` sub-package.
+- Don't add `Newtonsoft.Json` or any other JSON dependency. The library does not read files; callers load their own data.
 - Don't add a logging framework. The library is library-only — surfaces should throw on misuse, not log.
 - Don't add LINQ to hot paths inside the library. Users can compose their own.
 - Don't broaden `IRandom`. It's a load-bearing surface; new methods should go on a sibling utility class.
