@@ -56,6 +56,57 @@ namespace ShadowLib.DeterminismCheck
             hash = Start;
             for (int i = 0; i < Draws; i++) hash = Mix(hash, (ulong)system.Next(0, 100));
             Add("System.Random(12345).Next(0, 100)", hash);
+            hash = Start;
+            for (int i = 0; i < Draws; i++) hash = Mix(hash, (ulong)(long)system.Next(-1000, 1000 + i % 977));
+            Add("System.Random | int range", hash);
+            hash = Start;
+            for (int i = 0; i < Draws; i++)
+            {
+                float min = i % 91 * 0.5f;
+                float span = 1000f + i % 97 * 2f - min;
+                hash = Mix(hash, Bits((float)((float)((float)system.NextDouble() * span) + min)));
+            }
+            Add("System.Random | float range", hash);
+            hash = Start;
+            for (int i = 0; i < Draws; i++)
+            {
+                double min = i % 91 * 0.5;
+                double span = 1000.0 + i % 97 * 2.0 - min;
+                hash = Mix(hash, Bits(system.NextDouble() * span + min));
+            }
+            Add("System.Random | double range", hash);
+            hash = Start;
+            for (int i = 0; i < Draws; i++)
+            {
+                float target = (float)((float)system.NextDouble() * 300f);
+                float cumulative = 0f;
+                ulong picked = 23;
+                for (int k = 0; k < 24; k++)
+                {
+                    cumulative += k + 1;
+                    if (target < cumulative) { picked = (ulong)k; break; }
+                }
+                hash = Mix(hash, picked);
+            }
+            Add("System.Random | weighted pick", hash);
+            var systemShuffle = new int[5000];
+            for (int i = 0; i < systemShuffle.Length; i++) systemShuffle[i] = i;
+            for (int i = systemShuffle.Length - 1; i > 0; i--)
+            {
+                int j = system.Next(i + 1);
+                int swap = systemShuffle[i]; systemShuffle[i] = systemShuffle[j]; systemShuffle[j] = swap;
+            }
+            hash = Start;
+            foreach (int value in systemShuffle) hash = Mix(hash, (ulong)value);
+            Add("System.Random | shuffle", hash);
+            var systemBytes = new byte[4096];
+            hash = Start;
+            for (int round = 0; round < 50; round++)
+            {
+                system.NextBytes(systemBytes);
+                foreach (byte value in systemBytes) hash = Mix(hash, value);
+            }
+            Add("System.Random | NextBytes", hash);
 
             var rng = new Xoshiro128StarStar(12345UL);
             hash = Start;
