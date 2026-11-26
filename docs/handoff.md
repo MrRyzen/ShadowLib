@@ -5,16 +5,16 @@
 Finish the ShadowLib roadmap (`SHADOWLIB_ROADMAP.md`) in three projects, agreed with the user in this order:
 
 1. **Orchestrator redesign + thread/Burst safety + `XorShift128` removal** — done.
-2. **The small roadmap items** — in progress. Done: `IEffect<T>` + `EffectWheel<TEffect, TTarget>` (item 8), which grew into a revamp of `DynamicWeightTable<T>`. Remaining: `SparseGraph<T>` with connected-component analysis (items 9, 10), `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`.
+2. **The small roadmap items** — in progress. Done: `IEffect<T>` + `EffectWheel<TEffect, TTarget>` (item 8), which grew into a revamp of `DynamicWeightTable<T>`; and the 3D backpack (`SpatialGraph3D` + `Polycube`), which replaced the roadmap's `SparseGraph<T>` and connected-component items (9, 10). Remaining: `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, and a new item, A* pathfinding on `Grid2D`.
 3. **BSP, WFC, maze generation** — after project 2. The roadmap gives these one line and no API, so each needs its own short design conversation first.
 
 ## Current State
 
-- Everything is on local `main`, tip `b89aab5` plus this handoff commit. **Nothing is pushed**; the user pushes.
-- `dotnet test ShadowLib.sln -c Release`: 121/121 pass. `dotnet run --project ShadowLib.Runner` exits 0.
-- Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1): 7/7 EditMode tests pass against the tarball built from `b89aab5`: the 4 Burst tests and 3 new weight-table tests, one of which checks that Mono produces the same pinned pick sequence as .NET.
+- Everything is on local `main`, tip `6a74201` plus this handoff commit. **Nothing is pushed**; the user pushes.
+- `dotnet test ShadowLib.sln -c Release`: 158/158 pass. `dotnet run --project ShadowLib.Runner` exits 0.
+- Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1): 10/10 EditMode tests pass against the tarball built from `6a74201`: 4 Burst tests, 3 weight-table tests (one checks Mono produces the same pinned pick sequence as .NET) and 3 backpack tests.
 - Version is still `0.1.0-preview.5`. `CHANGELOG.md` `[Unreleased]` holds both sessions' work, including breaking changes. No release was cut.
-- The `SparseGraph<T>` design conversation has been opened with the user but nothing is decided or written.
+- No design conversation is open. The next roadmap item has not been started.
 
 ## Files in Flight
 
@@ -23,7 +23,7 @@ None in this repo; the working tree is clean.
 In `L:\Projects\games\ShadowLab` (a different repo, left uncommitted on purpose because its manifest already carried the user's own pending changes):
 
 - `Packages/manifest.json` / `packages-lock.json` — `com.shadowlib.core` pointing at `file:L:/Projects/packages/shadowlib/artifacts/upm/com.shadowlib.core-0.1.0-preview.5.tgz` (absolute path to a git-ignored build output; this machine only).
-- `Assets/_project/Tests/ShadowLibBurst/` — `ShadowLib.BurstTests.asmdef`, `XoshiroBurstTests.cs`, and new this session `WeightTableUnityTests.cs`.
+- `Assets/_project/Tests/ShadowLibBurst/` — `ShadowLib.BurstTests.asmdef`, `XoshiroBurstTests.cs`, and new this session `WeightTableUnityTests.cs` and `Backpack3DUnityTests.cs`.
 
 ## Changed
 
@@ -43,6 +43,13 @@ Commits on `main` from this session, oldest first:
 | `2d297c9` | `WeightModifier`, `ModifierOperation`, `ModifierLoader` deleted; runner demo; all docs |
 | `03d6664` | Review fixes: edge-draw and draw-count tests, `TieredTable.AddTier` no longer wipes a tier when it throws |
 | `b89aab5` | Review minors: `OverflowException` on total overflow, setter validation order, stronger tests, changelog |
+| `88a974c`, `731626d` | Design doc and plan for the 3D backpack: `docs/superpowers/specs/2026-11-26-backpack-3d-design.md`, `docs/superpowers/plans/2026-11-26-backpack-3d.md` |
+| `51057be` | `Polycube` (`Runtime/Spatial/Polycube.cs`): `FromBox`, `FromOffsets`, `FromPolyomino`, `Single` |
+| `e029c3d` | `SpatialGraph3D<TOccupant>` rewritten as a self-contained dense box: cells, pockets, all-or-nothing `Polycube` placement, `Free`, `Contains`, `GetCells`. `SparseGraph.cs` deleted |
+| `20f885b`, `94b0d3b` | `TryKill`, `TryKillRandom(rng)`, `Repair`, `KilledCell<TOccupant>`. `20f885b` was committed with one failing test (a test bug); `94b0d3b` fixes it |
+| `d674d0f` | `FindPockets` (six-neighbour flood fill) |
+| `58c2eab` | Runner demo, roadmap, changelog, usage guide, README, CLAUDE.md |
+| `6a74201` | Review fixes: `Polycube` rejects repeated cells from `FromPolyomino` and offsets too far apart to normalize; box volume capped at the array limit; `KilledCell` constructor made public; tests for every pocket direction; demo starts with two pockets |
 
 ## Failed Attempts
 
@@ -58,17 +65,15 @@ New this session:
 - **`unity command recompile` straight after `package_add`** failed with `Network error` because the editor was mid domain reload. `package_add` already triggers the reimport; just poll `editor_status` until `ready` / `compiling:false` / `domainReloadInProgress:false`, then run the tests.
 - **A superpowers plan workspace (`.superpowers/`) is not git-ignored in this repo.** It was excluded through `.git/info/exclude` (local only) and deleted after the run.
 - **Comparing two `dotnet run` outputs to check determinism** fails if the first run also builds, because build warnings land in stdout. Use `--no-build` for both.
+- **`Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before)`** reports 24 bytes that the code under test never allocated: NUnit's `object` overload boxes the `0` before the counter is read. Read the counter into a `long` local first, then assert.
+- **Chaining `git commit` after `dotnet test ... | grep ...` with `&&`** commits even when tests fail, because the exit code is grep's. Check the output for `Passed!` before committing.
+- **A reviewer-suggested test shape was wrong:** four cells in a `2×1×2` box form a ring, so they do not prove the "layer − 1" direction of `FindPockets`. Mutation-check any new direction test; the committed one uses a U shape in a `3×1×2` box.
 
 ## Next Step
 
-Continue the `SparseGraph<T>` design conversation (roadmap items 9 and 10). The facts that conversation starts from:
+Continue down the roadmap order table with `Polyomino.Generate` (item 11: N-cell shapes with tunable compactness, takes an `IRandom`). The roadmap gives it a three-line sketch that returns a `List<(int Col, int Row)>`; decide with the user whether it should return a `Polyomino` instead, since that is what `Grid2D` and `BinPacker` consume. Then `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, and the new A* on `Grid2D` item (no API designed yet).
 
-- `Runtime/Spatial/SparseGraph.cs` (638 lines) and `SpatialGraph3D.cs` (283 lines) already exist, are public, ship in the package, and have **no tests and no users** anywhere in the repo.
-- The existing `SparseGraph<TOccupant>` is keyed by a caller-chosen `int`, with alive/dead nodes and edges, occupancy, `Distance`, `GetNodesInRange`, `FindConnectedComponents` (all BFS, span-based). It has no `FindPath`.
-- The roadmap sketches a different API: coordinate-keyed (`AddNode(0, 0, data)`), `Node<T>` handles, `List<>` returns, plus `FindPath` (A*).
-- So the first decision is which shape wins: keep and finish the int-keyed scaffolding, or replace it with the roadmap's coordinate/handle API.
-
-After `SparseGraph`, continue down the roadmap order table: `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement` (its roadmap example uses `graph.Distance`), `CellularAutomata`.
+Each of these is small. Follow the same flow as this session: short design conversation, design doc, plan, inline execution on a feature branch, one independent review, fix everything it finds, Unity check, fast-forward into `main`.
 
 ## Notes
 
@@ -76,6 +81,9 @@ Durable facts worth carrying into any future sessions (see also `memory/MEMORY.m
 
 - **Orchestrator decisions, do not reopen:** instance not static; no parameterless constructor; `CreateRNG` seeds unchanged (`Seeding.DeriveSeed64(root, context)`); `Derive`/`Next`/`Fork` XOR a per-kind constant into the root; save is a versioned `byte[]`; `Fork` children are not part of the parent's save.
 - **Weight table decisions, do not reopen:** influence replaces the push-style API entirely (the user chose this over keeping both); the source is a `Func<float>`, not a provider interface; disabled / depleted / repeat-excluded items weigh zero instead of being picked and discarded; repeat prevention excludes rather than re-rolls; duplicate `Add` throws; stock and last pick are not serialized by the table. The model was taken from RNGNeeds' "Probability Influence" at the user's request. Features deliberately not copied: pick history, locked items, selection-method registry, pick-count curves.
+- **3D backpack decisions, do not reopen:** the user's vision is a Tarkov-style backpack with depth that degrades; 2D inventories stay on `Grid2D`. One class with built-in six-neighbour adjacency (the user chose this over keeping the generic `SparseGraph`); no pathfinding, distance or range queries on it (the user wants A* on `Grid2D` instead); killing a cell returns the cell and its item and never moves the item, and the damage/drop loop lives in the game; no rotation helper on shapes; an item can be placed only once; it is not an `ISpace`.
+- **Backpack invariants, each with a test:** every coordinate is bounds-checked per axis before it becomes a flat index (no wrap-around); `TryKillRandom` makes exactly one `rng.Range(0, AliveCount)` call and picks by rank in ascending index order; `TryKillRandom` and `FindPockets` do not allocate after warm-up; rebuilding saved state must go cells, then items, then dead cells.
+- **Known limits of the backpack, accepted:** memory is proportional to the box volume; `TryKillRandom` is a linear scan; cells cannot be removed once added; no test pins that `Free` releases its reference (a `WeakReference` test would be flaky under Unity's Mono; the reviewer confirmed it by probe).
 - **Pinned values:** `OrchestratorTests.DerivedSeeds_ArePinned` and `DynamicWeightTableTests.Sample_PlainTable_SequenceIsPinned`. If either fails, saved worlds or existing seeds would change: fix the code, not the pins, unless the break is intended and goes in the changelog.
 - **Weight table invariants:** exactly one `rng.NextFloat()` per picked item and none when nothing is pickable; no allocation per pick after warm-up; all influence sources are read before any mutation or draw. Each has a test.
 - **Known limits of the weight table, accepted:** no getter for an item's max stock or influence range (a save must know them from design data); sources of disabled or depleted items are not called; a source that calls back into its own table recurses; single-precision sums mean a weight tiny next to the total can round away.
