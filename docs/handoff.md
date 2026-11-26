@@ -1,4 +1,4 @@
-# Handoff — 2026-11-26 (second session)
+# Handoff — 2026-11-26 (end of second session)
 
 ## Goal
 
@@ -10,7 +10,7 @@ Finish the ShadowLib roadmap (`SHADOWLIB_ROADMAP.md`) in three projects, agreed 
 
 ## Current State
 
-- Everything is on local `main`, tip `6a74201` plus this handoff commit. **Nothing is pushed**; the user pushes.
+- Everything is on local `main`; the last code commit is `6a74201`, followed only by handoff commits. **Nothing is pushed**; the user pushes. There are no other local branches from this work.
 - `dotnet test ShadowLib.sln -c Release`: 158/158 pass. `dotnet run --project ShadowLib.Runner` exits 0.
 - Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1): 10/10 EditMode tests pass against the tarball built from `6a74201`: 4 Burst tests, 3 weight-table tests (one checks Mono produces the same pinned pick sequence as .NET) and 3 backpack tests.
 - Version is still `0.1.0-preview.5`. `CHANGELOG.md` `[Unreleased]` holds both sessions' work, including breaking changes. No release was cut.
@@ -71,9 +71,24 @@ New this session:
 
 ## Next Step
 
-Continue down the roadmap order table with `Polyomino.Generate` (item 11: N-cell shapes with tunable compactness, takes an `IRandom`). The roadmap gives it a three-line sketch that returns a `List<(int Col, int Row)>`; decide with the user whether it should return a `Polyomino` instead, since that is what `Grid2D` and `BinPacker` consume. Then `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, and the new A* on `Grid2D` item (no API designed yet).
+Start `Polyomino.Generate` (roadmap item 11) with a short design conversation. What that conversation starts from:
 
-Each of these is small. Follow the same flow as this session: short design conversation, design doc, plan, inline execution on a feature branch, one independent review, fix everything it finds, Unity check, fast-forward into `main`.
+- **Roadmap sketch:** `Polyomino.Generate(rng, cellCount: 12, compactness: 0.9f)`, growing from a seed cell and picking frontier cells weighted by neighbour count; high compactness gives blocky shapes, low gives sprawling ones. The sketch says it returns `List<(int Col, int Row)>`.
+- **First question for the user:** return a `Polyomino` instead of a list? `Grid2D`, `BinPacker` and `Polycube.FromPolyomino` all take a `Polyomino`, and `Polyomino.FromOffsets` already normalizes. Recommend `Polyomino`.
+- **Things to settle in the design:** exactly how `compactness` maps to frontier weights (pin it, because it fixes the output for a seed); how many `IRandom` draws per cell (keep it at one, like the weight table and `TryKillRandom`); what `cellCount <= 0` and out-of-range `compactness` do; a pinned-sequence test for one seed.
+- **Do not assume a 3D version is wanted.** `Polycube` exists now, but the user has not asked for `Polycube.Generate`. Ask, do not build.
+- **Existing code to read first:** `Runtime/Spatial/Polyomino.cs` (no rotation, no duplicate check in `FromOffsets`), `Runtime/RNG/Distributions/DynamicWeightTable.cs` (a ready weighted picker, though a hand-rolled cumulative pick over the frontier avoids its `IEquatable` and allocation costs).
+
+After that, in roadmap order, each with its own short design pass:
+
+- **`RandomWalk`** (item 12): `RandomWalk.Generate(rng, length, bounds, bias: new DirectionBias(forward, up, down))` returning positions, with boundary clamping.
+- **`SpacedPlacement`** (item 13): `SpacedPlacement.Place(rng, candidates, count, minDistance, distanceFunc)`. It takes a distance function, so it needs no graph type.
+- **`CellularAutomata`** (item 14): birth/survive rules stepped over a `FieldGrid<bool>`.
+- **A* on `Grid2D`** (item 10, added this session at the user's request): no API designed yet.
+
+Then project 3 (BSP, WFC, maze generation).
+
+The flow that worked twice this session, per feature: design conversation with concrete options and a recommendation → design doc in `docs/superpowers/specs/` with a builder-check subagent (Sonnet) → plan in `docs/superpowers/plans/` → inline execution on a feature branch, test first → one whole-branch review subagent (Fable) → fix everything it finds, minors included, mutation-checking any test added for already-correct code → repack and run the Unity tests → fast-forward into `main`, delete the branch → update this file.
 
 ## Notes
 
