@@ -10,7 +10,10 @@ Users bypass `Orchestrator` and build their own manager around bare `Xoshiro128S
 - Three kinds of stream from one root seed.
 - Save and load that restore a run exactly.
 
-Non-goals: thread safety, new RNG algorithms, `XorShift128` cleanup, a serializer dependency.
+- Usable from Unity jobs, Burst and ECS, and from plain managed threads.
+- `XorShift128` removed.
+
+Non-goals: new RNG algorithms, a serializer dependency, any `UnityEngine` or `Unity.*` reference in `Runtime/`. The remaining roadmap items are separate projects.
 
 Anti-goal: any path that produces a non-replayable stream by default.
 
@@ -49,9 +52,29 @@ public sealed class Orchestrator
 - **Load rejects bad input**: unknown version or truncated data throws and leaves the orchestrator untouched.
 - `Fork` children are independent. The parent's save does not include them; whoever owns a child saves it.
 
+## Threads, jobs, Burst
+
+Burst cannot touch classes, interfaces, strings or dictionaries, so a lock alone does not make the orchestrator job-usable. Two parts:
+
+- **Unmanaged generator.** A new `Xoshiro128` struct (four `uint` fields, no references) carries the whole algorithm: `NextUInt`, `NextInt`, `NextULong`, `NextFloat`, `NextDouble`, the four `Range` overloads, and a `State` property. The `Xoshiro128StarStar` class becomes a thin `IRandom` wrapper over it, so there is one implementation and both produce identical output for the same seed. Jobs hold the struct by value.
+- **Seeds without strings.** `Orchestrator.DeriveSeed(context)` and `NextSeed(context)` return the `ulong` that `Derive` and `Next` would seed with. `Seeding.DeriveSeed64(ulong root, ulong index)` is a new arithmetic-only overload. The main thread asks the orchestrator for one seed, and each job iteration builds `new Xoshiro128(Seeding.DeriveSeed64(seed, index))`.
+
+Managed threads: the stream cache and the `Next` counters sit behind one lock, so `CreateRNG`, `Next`, `Save` and `Load` are safe to call concurrently. Rules the docs must state:
+
+- An `IRandom` or `Xoshiro128` is single-threaded. One per thread or per job iteration.
+- `Derive` and `DeriveSeed` are order-independent and safe anywhere.
+- `Next` hands out series positions in call order, so calling it from racing threads is safe but not replayable. Call it from one thread and pass the result in.
+
+Verification limit: `dotnet test` can prove the struct is unmanaged and matches the class bit for bit. It cannot run the Burst compiler; that needs a Unity project.
+
+## XorShift128
+
+Deleted. Nothing in the repo references it, it does not implement `IRandom`, and the docs already call it deprecated.
+
 ## Touches
 
 - `Runtime/RNG/Orchestrator.cs` rewritten.
+- `Runtime/RNG/Sources/Xoshiro128StarStar.cs` split into struct plus wrapper; `Seeding.cs` gains the index overload; `XorShift128.cs` and its `.meta` removed.
 - `Tests/Runtime/OrchestratorTests.cs` rewritten; `DiceTests.cs`, `ShadowLib.Runner/Program.cs`, `Samples~/BasicUsage/ShadowLibBasicUsage.cs` moved to an instance.
 - `README.md`, `USAGE_GUIDE.md`, `CONTRIBUTING.md`, `CLAUDE.md`, `SHADOWLIB_ROADMAP.md`, `CHANGELOG.md` `[Unreleased]`.
 
