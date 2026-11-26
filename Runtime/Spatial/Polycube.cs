@@ -2,6 +2,7 @@ namespace ShadowLib.Spatial
 {
     using System;
     using System.Collections.Generic;
+    using ShadowLib.RNG.Sources;
 
     /// <summary>
     /// A three-dimensional shape as a set of cell offsets relative to an anchor at (0, 0, 0):
@@ -122,6 +123,25 @@ namespace ShadowLib.Spatial
             RequireDistinct(offsets, nameof(shape));
             return new Polycube(offsets, shape.Width, shape.Height, depth);
         }
+
+        /// <summary>
+        /// Grows a random face-connected shape one cell at a time. Makes exactly
+        /// <paramref name="cellCount"/> - 1 <see cref="IRandom.NextFloat"/> draws.
+        /// </summary>
+        /// <param name="rng">The random source.</param>
+        /// <param name="cellCount">How many cells the shape has. Must be greater than zero.</param>
+        /// <param name="compactness">0 grows thin, sprawling shapes; 1 grows dense, blocky ones.</param>
+        /// <param name="maxWidth">Largest allowed bounding-box width.</param>
+        /// <param name="maxHeight">Largest allowed bounding-box height.</param>
+        /// <param name="maxDepth">Largest allowed bounding-box depth.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="rng"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The cell count or a limit is not positive, compactness is outside 0..1, or the limits cannot hold the cell count.
+        /// </exception>
+        public static Polycube Generate(
+            IRandom rng, int cellCount, float compactness,
+            int maxWidth = int.MaxValue, int maxHeight = int.MaxValue, int maxDepth = int.MaxValue) =>
+            FromOffsets(ShapeGrowth.Grow(rng, cellCount, compactness, maxWidth, maxHeight, maxDepth));
 
         private static void RequireDistinct((int Col, int Row, int Layer)[] offsets, string paramName)
         {

@@ -39,7 +39,7 @@ Static methods on the existing structs. The result is normalized like every othe
 
 1. The shape starts as one cell. No draw.
 2. The frontier is every empty cell that shares a face with the shape (four neighbours in 2D, six in 3D) and that would keep the shape's bounding size within the limits. The limits apply to the extent, not to a fixed position: the shape may grow in any direction until an axis reaches its maximum.
-3. Each frontier cell weighs `(1 - compactness) * stringy[n] + compactness * blocky[n]`, where `n` is how many shape cells it touches. `blocky` rises steeply with `n`, `stringy` falls steeply with `n`.
+3. Each frontier cell weighs `r^(n-1)`, where `n` is how many shape cells it touches and `r = (1 + 31c) / (32 - 31c)` for compactness `c`. So `r` runs from 1/32 (each extra touching cell makes a spot 32 times less likely) through 1 at `c = 0.5` (all spots equal) to 32. Powers are built by repeated multiplication, all in `double`.
 4. One `rng.NextFloat()` picks a frontier cell by cumulative weight, walking the frontier in the order cells first joined it. Repeat from 2 until `cellCount` cells exist.
 
 Exactly `cellCount - 1` draws, each a single `NextFloat()`.
@@ -56,13 +56,13 @@ Growth cannot get stuck: while fewer cells exist than the limit box holds, some 
 
 ## Approaches
 
-- **Chosen: one internal 3D growth core, 2D calls it with depth limited to 1.** One rule to test and pin. The 2D call passes a neighbour maximum of 4 so its weight tables match a flat shape.
+- **Chosen: one internal 3D growth core, 2D calls it with depth limited to 1.** One rule to test and pin.
 - **Separate 2D and 3D implementations.** Slightly faster in 2D, but two copies of the rule that can drift. Rejected.
 - **Use `DynamicWeightTable` as the picker.** Brings `IEquatable` lookups, influence delegates and allocation for a job a twenty-line cumulative walk does. Rejected.
 
 ## Left to the builder
 
-- The exact `blocky` / `stringy` tables. Start from powers of eight (`blocky[n] = 8^(n-1)`, `stringy[n] = 8^(N-n)`), print shapes in the runner at compactness 0, 0.5 and 1, and adjust until 0 is visibly stringy and 1 is visibly blocky. Then pin. After the pin test exists the tables do not change.
+- The weight rule was tuned during the build and is now pinned (see Behaviour 3). The first idea, a linear blend of a "stringy" and a "blocky" table, stayed stringy until compactness was almost 1; the ratio form changes evenly. Measured over 200 seeds at 12 cells, mean bounding area goes 28.1 → 23.4 → 14.4 and mean bounding volume 54.9 → 45.4 → 17.9 at compactness 0 / 0.5 / 1. The rule no longer depends on the neighbour maximum, so 2D is exactly the 3D rule with depth limited to 1.
 - Internal data structures, as long as frontier order is insertion order.
 - Where the core lives (an internal static class in `Runtime/Spatial/`).
 

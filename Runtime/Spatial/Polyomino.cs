@@ -1,6 +1,7 @@
 namespace ShadowLib.Spatial
 {
     using System;
+    using ShadowLib.RNG.Sources;
 
     /// <summary>
     /// Represents an arbitrary polyomino shape as a set of cell offsets relative to an anchor at (0, 0).
@@ -104,6 +105,31 @@ namespace ShadowLib.Spatial
             int height = maxRow - minRow + 1;
 
             return new Polyomino(normalized, width, height);
+        }
+
+        /// <summary>
+        /// Grows a random edge-connected shape one cell at a time. Makes exactly
+        /// <paramref name="cellCount"/> - 1 <see cref="IRandom.NextFloat"/> draws.
+        /// </summary>
+        /// <param name="rng">The random source.</param>
+        /// <param name="cellCount">How many cells the shape has. Must be greater than zero.</param>
+        /// <param name="compactness">0 grows thin, sprawling shapes; 1 grows dense, blocky ones.</param>
+        /// <param name="maxWidth">Largest allowed bounding-box width.</param>
+        /// <param name="maxHeight">Largest allowed bounding-box height.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="rng"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The cell count or a limit is not positive, compactness is outside 0..1, or the limits cannot hold the cell count.
+        /// </exception>
+        public static Polyomino Generate(
+            IRandom rng, int cellCount, float compactness,
+            int maxWidth = int.MaxValue, int maxHeight = int.MaxValue)
+        {
+            var grown = ShapeGrowth.Grow(rng, cellCount, compactness, maxWidth, maxHeight, maxDepth: 1);
+            var offsets = new (int Col, int Row)[grown.Length];
+            for (int i = 0; i < grown.Length; i++)
+                offsets[i] = (grown[i].Col, grown[i].Row);
+
+            return FromOffsets(offsets);
         }
 
         private static readonly Polyomino _single = FromRect(1, 1);
