@@ -8,17 +8,17 @@ Finish the ShadowLib roadmap (`SHADOWLIB_ROADMAP.md`) in three projects, agreed 
 2. **The small roadmap items** — done. This session: `Polyomino.Generate` / `Polycube.Generate` (item 11), `RandomWalk` (12), `SpacedPlacement` (13), `CellularAutomata` (14), and grid pathfinding (item 10), which the user widened from "A*" to A*, Jump Point Search and flow fields.
 3. **BSP, WFC, maze generation** — **deferred by the user on 2026-11-26 ("drop those till needed")**. Do not start them unprompted. If one is asked for, it needs its own short design conversation first; the roadmap has no API for any of them.
 
-So this roadmap pass is finished. Nothing is in progress.
+So this roadmap pass is finished, and every fix found by the 2026-11-26 speed and determinism runs is done or deliberately declined (see Next Step). Nothing is in progress.
 
 ## Current State
 
-- Local `main` is at `d167202` plus handoff commits; that is also the last library change (the three fixes of 2026-11-26 and their review fixes). **Nothing is pushed**; the user pushes. No feature branches or extra worktrees remain from this work (`determinism-fixes-and-perf` is an older branch, not touched).
-- `dotnet test ShadowLib.sln -c Release`: 291/291 (`[Explicit]` tests are not counted). `dotnet run --project ShadowLib.Runner` exits 0 and prints the same output on repeated `--no-build` runs.
-- Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1, Burst 2.0.0): 23/23 EditMode tests against the tarball built from `d167202`. After the fixes all 39 fingerprint rows matched on all ten runtimes of the matrix (built from `5f74047`; the later review commit changed tests, docs, the constructor's argument check and one redundant flag only, and the Windows fingerprint was re-checked unchanged).
+- Local `main` is at `0c375a4` plus handoff commits. The last library change is the `ScalingCurve.Logarithmic` fix in `c8d4f4a` (`0c375a4` reverts the `Range` rewrite that came with it). **Nothing is pushed**; the user pushes. No feature branches or extra worktrees remain from this work (`determinism-fixes-and-perf` is an older branch, not touched).
+- `dotnet test ShadowLib.sln -c Release`: 294/294 on Windows and, run in a `dotnet/sdk:8.0` container, on Linux (`[Explicit]` tests are not counted). `dotnet run --project ShadowLib.Runner` exits 0 and prints the same output on repeated `--no-build` runs.
+- Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1, Burst 2.0.0): 23/23 EditMode tests against the tarball built from `c8d4f4a`. The full matrix was re-run on `0c375a4`: all 39 fingerprint rows match on all ten runtimes (Windows .NET 8; Linux .NET 8 glibc, musl, intrinsics off; Linux .NET 9; Unity editor; built Windows and Linux players on Mono and IL2CPP). The only rows that still split belong to `Unity.Mathematics.Random` and `UnityEngine.Random`.
 - Version is still `0.1.0-preview.5`. `CHANGELOG.md` `[Unreleased]` holds all three sessions' work, including breaking changes. No release was cut.
 
-- **Determinism was measured across runtimes on 2026-11-26** (see "Determinism results" under Notes). One open finding: `ScalingCurve.Exponential` is not bit-identical between Windows and Linux. The user has been asked twice whether to fix it and has not answered; it is item 3 under Next Step.
-- **Performance was measured in the Unity editor the same day.** Two slow spots were found, `DynamicWeightTable.Sample` and managed `NextFloat`. The user first said to hold them, then asked for them to be recorded as things to fix; they are items 1 and 2 under Next Step. Not started.
+- **Determinism was measured across runtimes on 2026-11-26** (see "Determinism results" under Notes). The one finding in our own code, `ScalingCurve` exponential and logarithmic curves depending on the platform's pow and log, is fixed.
+- **Performance was measured in the Unity editor the same day.** The two slow spots found, `DynamicWeightTable.Sample` and managed `NextFloat`, are fixed. Managed `Range(int)` stays about twice the cost of `Unity.Mathematics.Random`'s by choice (see Next Step item 5).
 
 ## Files in Flight
 
@@ -92,7 +92,7 @@ New this session:
 
 ## Next Step
 
-The roadmap pass is finished (BSP, WFC and maze generation are deferred until the user asks). What is left is the list of things the 2026-11-26 measurements found. The user asked for them to be written down here; **none has been started, and the user has not yet said to start any of them.** Ask which to take first, or take them in this order.
+The roadmap pass is finished (BSP, WFC and maze generation are deferred until the user asks), and so is the fix list from the 2026-11-26 measurements: the user said "some fixes", then "fix both" for the two left over, then "merge it when the matrix is clean". Nothing is queued; the record of what was done is below because it explains several tests and comments.
 
 ### Fixed on 2026-11-26 (the user said "some fixes"; all three were done)
 
