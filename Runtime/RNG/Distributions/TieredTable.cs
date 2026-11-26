@@ -23,12 +23,14 @@ namespace ShadowLib.RNG.Distributions
 
         public void AddTier(int tier, IEnumerable<(T item, float weight)> items)
         {
-            _entries[tier] = new DynamicWeightTable<T>();
+            var table = new DynamicWeightTable<T>();
 
             foreach (var (item, weight) in items)
             {
-                _entries[tier].Add(item, weight);
+                table.Add(item, weight);
             }
+
+            _entries[tier] = table;
         }
 
         public T[] Sample(IRandom rng, int tier, int drops = 1)

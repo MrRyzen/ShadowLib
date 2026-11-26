@@ -21,6 +21,89 @@ namespace ShadowLib.Tests
             return table;
         }
 
+        private sealed class FixedRandom : IRandom
+        {
+            private readonly float _value;
+            public FixedRandom(float value) => _value = value;
+            public float NextFloat() => _value;
+
+            public byte[] GetState() => throw new NotSupportedException();
+            public void SetState(byte[] state) => throw new NotSupportedException();
+            public void SetState(ReadOnlySpan<byte> state) => throw new NotSupportedException();
+            public void Seed(ulong seed) => throw new NotSupportedException();
+            public uint NextUInt() => throw new NotSupportedException();
+            public int NextInt() => throw new NotSupportedException();
+            public ulong NextULong() => throw new NotSupportedException();
+            public double NextDouble() => throw new NotSupportedException();
+            public int Range(int min, int max) => throw new NotSupportedException();
+            public float Range(float min, float max) => throw new NotSupportedException();
+            public double Range(double min, double max) => throw new NotSupportedException();
+            public ulong Range(ulong min, ulong max) => throw new NotSupportedException();
+        }
+
+        private static readonly FixedRandom LowestDraw = new FixedRandom(0f);
+        private static readonly FixedRandom HighestDraw = new FixedRandom(0.99999994f);
+
+        [Test]
+        public void EdgeDraws_NeverReturnUnpickableItems()
+        {
+            var firstDisabled = PlainTable();
+            firstDisabled.SetEnabled("A", false);
+            Assert.AreEqual("B", firstDisabled.Sample(LowestDraw));
+
+            var tailUnpickable = PlainTable();
+            tailUnpickable.SetEnabled("D", false);
+            tailUnpickable.SetStock("C", 0, 1);
+            Assert.AreEqual("B", tailUnpickable.Sample(HighestDraw));
+
+            var firstExcluded = PlainTable();
+            firstExcluded.PreventRepeat = true;
+            firstExcluded.SetLastPicked("A");
+            Assert.AreEqual("B", firstExcluded.Sample(LowestDraw));
+
+            var lastExcluded = PlainTable();
+            lastExcluded.PreventRepeat = true;
+            lastExcluded.SetLastPicked("D");
+            Assert.AreEqual("C", lastExcluded.Sample(HighestDraw));
+        }
+
+        [Test]
+        public void EveryFeatureOn_StillOneDrawPerPick()
+        {
+            var t = PlainTable();
+            t.Add("E", 5f);
+            t.Add("F", 6f);
+            t.PreventRepeat = true;
+            t.SetEnabled("A", false);
+            t.SetStock("E", 3);
+            t.SetInfluence("F", 0f, 6f, () => -1f);
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+
+            for (int i = 0; i < 2000; i++) { t.Sample(rng); reference.NextFloat(); }
+            var pair = new string[2];
+            for (int i = 0; i < 500; i++)
+            {
+                Assert.AreEqual(2, t.SampleDistinct(rng, pair));
+                reference.NextFloat();
+                reference.NextFloat();
+            }
+
+            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+        }
+
+        [Test]
+        public void TieredTable_AddTier_WithDuplicate_KeepsTheExistingTier()
+        {
+            var loot = new TieredTable<string>();
+            loot.AddTier(1, new[] { ("Sword", 1f), ("Vest", 2f) });
+
+            Assert.Throws<ArgumentException>(() => loot.AddTier(1, new[] { ("Potion", 1f), ("Potion", 1f) }));
+
+            Assert.AreEqual(2, loot.GetTier(1).Count);
+            Assert.IsTrue(loot.GetTier(1).Contains("Sword"));
+        }
+
         [Test]
         public void Sample_PlainTable_SequenceIsPinned()
         {
