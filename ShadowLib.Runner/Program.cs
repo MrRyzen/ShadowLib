@@ -135,6 +135,26 @@ namespace ShadowLib.Runner
             }
             Console.WriteLine($"  after damage: {pack.AliveCount} living cells in {pack.FindPockets(pocketIds)} pocket(s), still holding {string.Join(" and ", carried.Where(pack.Contains).DefaultIfEmpty("nothing"))}");
 
+            var shapeRng = orchestrator.CreateRNG("shapes");
+            foreach (float compactness in new[] { 0.1f, 0.9f })
+            {
+                var pouch = Polyomino.Generate(shapeRng, cellCount: 10, compactness, maxWidth: 6, maxHeight: 4);
+                Console.WriteLine($"\nGenerated polyomino, compactness {compactness} ({pouch.Width}x{pouch.Height}):");
+                var rows = new char[pouch.Height][];
+                for (int row = 0; row < pouch.Height; row++)
+                    rows[row] = new string('.', pouch.Width).ToCharArray();
+                foreach (var (col, row) in pouch.Offsets)
+                    rows[row][col] = '#';
+                foreach (char[] row in rows)
+                    Console.WriteLine($"  {new string(row)}");
+            }
+
+            var lump = Polycube.Generate(shapeRng, cellCount: 6, compactness: 0.7f, maxWidth: 2, maxHeight: 2, maxDepth: 3);
+            var crate = new SpatialGraph3D<string>(width: 2, height: 2, layers: 3);
+            crate.AddPocket(Polycube.FromBox(2, 2, 3), 0, 0, 0);
+            crate.Place(0, 0, 0, "Lump", lump);
+            Console.WriteLine($"Generated polycube: {lump.CellCount} cells, {lump.Width}x{lump.Height}x{lump.Depth}, fits its 2x2x3 crate: {crate.Contains("Lump")}");
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);

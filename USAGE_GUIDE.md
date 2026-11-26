@@ -455,6 +455,19 @@ foreach (var (c, r) in rect.Offsets) { /* zero-alloc enumeration */ }
 
 `FromOffsets` automatically normalizes so the minimum column and row are both 0 — pass any anchor, get a canonical shape.
 
+#### Generated shapes
+
+```csharp
+var rig   = Polyomino.Generate(rng, cellCount: 12, compactness: 0.9f);                        // blocky
+var pouch = Polyomino.Generate(rng, cellCount: 8,  compactness: 0.2f, maxWidth: 4, maxHeight: 3); // sprawling, but fits 4x3
+var lump  = Polycube.Generate(rng, cellCount: 10, compactness: 0.7f, maxWidth: 4, maxHeight: 4, maxDepth: 2);
+```
+
+- The shape grows one cell at a time from a single cell; every cell shares an edge (2D) or a face (3D) with the rest.
+- `compactness` runs 0 to 1: 0 prefers spots touching one cell (thin, sprawling), 0.5 treats all spots equally, 1 prefers spots touching many cells (dense, blocky).
+- The `max` limits cap the bounding box, so a shape always fits a container of that size. `maxDepth: 1` gives a flat `Polycube`. Asking for more cells than the limits hold throws.
+- Exactly `cellCount - 1` `rng.NextFloat()` draws. Same generator state and arguments give the same shape on every platform.
+
 ### `Grid2D<TCell, TOccupant>`
 
 Dense flat-array-backed 2D grid. Cells are user-defined and created via factory.
@@ -728,7 +741,7 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `XorShift128` — removed. Use `Xoshiro128StarStar` (class, `IRandom`) or `Xoshiro128` (struct, jobs).
 - `Xoshiro128` implementing `IRandom` — it does not; it is a plain struct. The `IRandom` implementation is `Xoshiro128StarStar`.
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
-- `Polyomino.Generate(rng, cellCount, compactness)` — listed in the roadmap as **pending**, not yet implemented.
+- `Polyomino.Generate` / `Polycube.Generate` returning a `List` of positions — they return the `Polyomino` / `Polycube` struct. Their `max` limits are bounding-box sizes, not coordinates, and there is no per-axis bias parameter.
 - `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, A* / pathfinding on `Grid2D` — all roadmap-only. Do not write code that calls these.
 - `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
 - `Polycube` / `Polyomino` rotation helpers, and `SpatialGraph3D` implementing `ISpace` or working with `BinPacker` — none of these exist.

@@ -61,7 +61,7 @@ The interface split is the load-bearing design:
 
 - `ICell<TOccupant>` — a single grid cell. Cells are created by user-supplied factory (`cellFactory: (x, y) => new MyCell()`); the grid calls `Initialize(x, y)` after construction.
 - `ISpace<TOccupant>` — anything that can hold polyomino-shaped occupants (`CanOccupy` / `Occupy` / `Free` / `IsOccupied`). `Grid2D` is the only implementation today; `BinPacker` and any future spatial algorithms target this interface, not `Grid2D` directly. **Code against `ISpace`, not `Grid2D`.**
-- `Polyomino` — readonly struct, normalized so min(col,row) is always (0,0). Build via `Polyomino.FromRect(w, h)` or `Polyomino.FromOffsets(params (int Col, int Row)[])`. `Offsets` returns a `ReadOnlySpan` — no allocation on iteration.
+- `Polyomino` — readonly struct, normalized so min(col,row) is always (0,0). Build via `Polyomino.FromRect(w, h)` or `Polyomino.FromOffsets(params (int Col, int Row)[])`. `Offsets` returns a `ReadOnlySpan` — no allocation on iteration. `Polyomino.Generate` / `Polycube.Generate` share one growth rule in `ShapeGrowth` (2D is the 3D rule with depth 1); its maths is `double` add/multiply/divide only (no `Math.Pow`) and the frontier is walked in insertion order, so shapes match across runtimes. `Generate_Seed123_ShapeIsPinned` (both test classes) must not change.
 
 Two grid types serve different purposes — don't conflate them:
 - `Grid2D<TCell, TOccupant>` — class-based, dense flat array, internal occupancy index (`Dictionary<TOccupant, HashSet<int>>`) for O(1) `Free(occupant)`. Use when cells carry behavior or multi-cell occupancy matters.

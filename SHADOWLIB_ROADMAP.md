@@ -49,9 +49,9 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 - **`ISpace<TOccupant>`** — Spatial container interface for polyomino-shaped occupancy (canOccupy, occupy, free).
 - **`Grid2D<TCell, TOccupant>`** — Dense flat-array-backed 2D grid with zero-alloc Span queries, internal occupancy index, world-space conversion, neighbor queries (4/8-way), range/rect queries, struct enumerator.
 - **`FieldGrid<T>`** — Lightweight struct-value grid for scalar fields (density maps, heatmaps, influence grids). Ref access, mutable row spans, bulk fill/copy/snapshot.
-- **`Polyomino`** — Immutable shape struct from rect or explicit offsets, normalized to (0,0) anchor. Bounding box metadata.
+- **`Polyomino`** — Immutable shape struct from rect or explicit offsets, normalized to (0,0) anchor. Bounding box metadata. `Polyomino.Generate` grows a seeded N-cell shape with tunable compactness and an optional size limit.
 
-- **`Polycube`** — Immutable 3D shape struct from a box, explicit offsets, or an extruded `Polyomino`. Normalized to a (0,0,0) anchor.
+- **`Polycube`** — Immutable 3D shape struct from a box, explicit offsets, or an extruded `Polyomino`. Normalized to a (0,0,0) anchor. `Polycube.Generate` is the 3D shape generator, same growth rule as `Polyomino.Generate`.
 - **`SpatialGraph3D<TOccupant>`** — 3D inventory box that wears out (a Tarkov-style backpack with depth). Pockets of cells, all-or-nothing `Polycube` item placement, cells that die and can be repaired (`TryKill`, seeded `TryKillRandom`, `Repair`), and `FindPockets` for which living cells still form one compartment. Killing a cell reports what was on it and leaves the item in place.
 
 **Future consideration:** `CanOccupyCell(x, y, w, h)` region check is O(w\*h). For large grids + large entity footprints (RTS base placement, 1000x1000 influence maps), consider adding an occupancy bitmask or 2D prefix-sum occupancy map for O(1) rect queries.
@@ -68,20 +68,6 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ### A* pathfinding on Grid2D
 
 Shortest path between two cells of a `Grid2D`, with caller-supplied walkability and step cost. No API designed yet. Requirements: no allocation per query, tuned for speed, and a core usable from Unity jobs / Burst / ECS (an unmanaged struct over caller-supplied buffers, since `Runtime/` cannot reference `Unity.Collections`). (Pathfinding was deliberately left out of `SpatialGraph3D`.)
-
-### Polyomino Generator
-
-Generate N-cell shapes with tunable compactness. Grows from a seed cell, picking frontier cells weighted by neighbor count. A 3D counterpart, `Polycube.Generate`, follows the same growth rule over six face neighbours, for generated 3D items and pockets in `SpatialGraph3D`.
-
-```csharp
-// Compact bias → rectangular shapes (military rig)
-var shape = Polyomino.Generate(rng, cellCount: 12, compactness: 0.9f);
-
-// Low bias → sprawling shapes (scavenged pouch)
-var shape = Polyomino.Generate(rng, cellCount: 8, compactness: 0.2f);
-
-// Returns List<(int Col, int Row)> — cell positions relative to origin
-```
 
 ### Random Walk
 
@@ -142,7 +128,7 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 8 | `IEffect<T>` + `EffectWheel<T,T>` | `DynamicWeightTable` | Low | **Done** |
 | 9 | `SpatialGraph3D` + `Polycube` (3D inventory that wears out, with pocket analysis) | `Polyomino` | Medium | **Done** |
 | 10 | A* pathfinding on `Grid2D` | `Grid2D` | Medium | Pending |
-| 11 | `Polyomino Generator` + `Polycube Generator` | `IRandom` | Low | Pending |
+| 11 | `Polyomino Generator` + `Polycube Generator` | `IRandom` | Low | **Done** |
 | 12 | `Random Walk` | `IRandom` | Low | Pending |
 | 13 | `Spaced Placement` | — | Low | Pending |
 | 14 | `Cellular Automata` | `FieldGrid` | Medium | Pending |
