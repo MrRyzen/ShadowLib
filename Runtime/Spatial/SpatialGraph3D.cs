@@ -4,53 +4,41 @@ namespace ShadowLib.Spatial
     using System.Collections.Generic;
 
     /// <summary>
-    /// A spatial layer over <see cref="SparseGraph{TOccupant}"/> that maps (x, y, layer) coordinates
-    /// to flat integer indices via <c>layer * Width * Height + y * Width + x</c>.
-    /// <para>
-    /// Only nodes that are explicitly added exist in the underlying graph — no dense allocation.
-    /// Supports pocket generation from <see cref="Polyomino"/> shapes with auto-wiring of 4-adjacent
-    /// neighbors, cross-layer connections, and polyomino-based occupancy placement.
-    /// </para>
+    /// A width × height × layers box for a 3D inventory that wears out. Only cells that were added exist
+    /// (the pockets); items are <see cref="Polycube"/> shapes that occupy cells; cells can die and be repaired.
     /// </summary>
-    /// <typeparam name="TOccupant">Type stored in each node.</typeparam>
+    /// <typeparam name="TOccupant">The item type. Items are told apart with the comparer given to the constructor.</typeparam>
+    /// <remarks>
+    /// Memory is proportional to <see cref="Volume"/>, not to the number of cells that exist.
+    /// Shapes do not rotate. This is not an <see cref="ISpace{TOccupant}"/>. Not thread-safe.
+    /// To rebuild saved state: add cells, place items, then kill the dead cells; no other order
+    /// can recreate an item sitting on a dead cell.
+    /// </remarks>
     public sealed class SpatialGraph3D<TOccupant>
         where TOccupant : notnull
     {
-        private readonly Dictionary<TOccupant, List<int>> _occupancyIndex;
+        [Flags]
+        private enum CellState : byte
+        {
+            None = 0,
+            Exists = 1,
+            Alive = 2,
+            Occupied = 4,
+        }
 
-        /// <summary>
-        /// Gets the number of columns in the coordinate space.
-        /// </summary>
-        public int Width { get; }
+        private const CellState Placeable = CellState.Exists | CellState.Alive;
 
-        /// <summary>
-        /// Gets the number of rows in the coordinate space.
-        /// </summary>
-        public int Height { get; }
+        private readonly CellState[] _states;
+        private readonly TOccupant[] _occupants;
+        private readonly Dictionary<TOccupant, int[]> _cellsByOccupant;
 
-        /// <summary>
-        /// Gets the number of layers in the coordinate space.
-        /// </summary>
-        public int Layers { get; }
-
-        /// <summary>
-        /// Gets the underlying sparse graph. Use for direct topology access
-        /// (neighbors, BFS algorithms, degradation, occupancy by index).
-        /// </summary>
-        public SparseGraph<TOccupant> Graph { get; }
-
-        /// <summary>
-        /// Creates a new spatial graph with the specified coordinate bounds.
-        /// No nodes are created — use <see cref="AddPocket"/> or <see cref="AddNode"/> to populate.
-        /// </summary>
-        /// <param name="width">Number of columns. Must be greater than zero.</param>
-        /// <param name="height">Number of rows. Must be greater than zero.</param>
-        /// <param name="layers">Number of layers. Must be greater than zero.</param>
-        /// <param name="initialCapacity">Initial capacity hint for the underlying graph.</param>
-        /// <exception cref="ArgumentOutOfRangeException">
-        /// Thrown when any dimension is less than or equal to zero.
-        /// </exception>
-        public SpatialGraph3D(int width, int height, int layers = 1, int initialCapacity = 64)
+        /// <summary>Creates an empty box. No cells exist until <see cref="AddCell"/> or <see cref="AddPocket"/>.</summary>
+        /// <param name="width">Columns. Must be greater than zero.</param>
+        /// <param name="height">Rows. Must be greater than zero.</param>
+        /// <param name="layers">Layers. Must be greater than zero.</param>
+        /// <param name="occupantComparer">How items are told apart; the default comparer when null.</param>
+        /// <exception cref="ArgumentOutOfRangeException">A dimension is not positive, or the volume does not fit in an int.</exception>
+        public SpatialGraph3D(int width, int height, int layers = 1, IEqualityComparer<TOccupant>? occupantComparer = null)
         {
             if (width <= 0)
                 throw new ArgumentOutOfRangeException(nameof(width), width, "Width must be greater than zero.");
@@ -58,37 +46,37 @@ namespace ShadowLib.Spatial
                 throw new ArgumentOutOfRangeException(nameof(height), height, "Height must be greater than zero.");
             if (layers <= 0)
                 throw new ArgumentOutOfRangeException(nameof(layers), layers, "Layers must be greater than zero.");
+            if ((long)width * height * layers > int.MaxValue)
+                throw new ArgumentOutOfRangeException(nameof(width), "The box volume does not fit in an int.");
 
             Width = width;
             Height = height;
             Layers = layers;
-            Graph = new SparseGraph<TOccupant>(initialCapacity);
-            _occupancyIndex = new Dictionary<TOccupant, List<int>>();
+            Volume = width * height * layers;
+            _states = new CellState[Volume];
+            _occupants = new TOccupant[Volume];
+            _cellsByOccupant = new Dictionary<TOccupant, int[]>(occupantComparer);
         }
 
-        /// <summary>
-        /// Converts (x, y, layer) coordinates to a flat node index.
-        /// </summary>
-        public int GetIndex(int x, int y, int layer = 0)
-        {
-            return layer * Width * Height + y * Width + x;
-        }
+        /// <summary>Gets the number of columns.</summary>
+        public int Width { get; }
 
-        /// <summary>
-        /// Converts a flat node index back to (x, y, layer) coordinates.
-        /// </summary>
-        public (int X, int Y, int Layer) GetPosition(int index)
-        {
-            int layerSize = Width * Height;
-            int layer = index / layerSize;
-            int remainder = index % layerSize;
-            return (remainder % Width, remainder / Width, layer);
-        }
+        /// <summary>Gets the number of rows.</summary>
+        public int Height { get; }
 
-        /// <summary>
-        /// Returns whether the specified coordinates are within the coordinate bounds.
-        /// Does not check whether a node actually exists at this position.
-        /// </summary>
+        /// <summary>Gets the number of layers.</summary>
+        public int Layers { get; }
+
+        /// <summary>Gets the size of the box: <see cref="Width"/> × <see cref="Height"/> × <see cref="Layers"/>.</summary>
+        public int Volume { get; }
+
+        /// <summary>Gets the number of cells that exist, living or dead.</summary>
+        public int ExistingCount { get; private set; }
+
+        /// <summary>Gets the number of living cells.</summary>
+        public int AliveCount { get; private set; }
+
+        /// <summary>Returns whether the position is inside the box, whether or not a cell exists there.</summary>
         public bool IsValidPosition(int x, int y, int layer = 0)
         {
             return (uint)x < (uint)Width
@@ -97,187 +85,170 @@ namespace ShadowLib.Spatial
         }
 
         /// <summary>
-        /// Returns whether a node exists at the specified coordinates in the underlying graph.
+        /// Converts a position to its flat index, <c>layer * Width * Height + y * Width + x</c>.
+        /// Only meaningful for positions inside the box.
         /// </summary>
-        public bool NodeExists(int x, int y, int layer = 0)
+        public int GetIndex(int x, int y, int layer = 0)
         {
-            if (!IsValidPosition(x, y, layer))
-                return false;
-
-            return Graph.ContainsNode(GetIndex(x, y, layer));
+            return layer * Width * Height + y * Width + x;
         }
 
-        /// <summary>
-        /// Stamps a polyomino shape as alive nodes at the specified anchor position.
-        /// Automatically connects each new node to existing 4-adjacent neighbors.
-        /// Positions that already have nodes are skipped.
-        /// </summary>
-        /// <param name="shape">The polyomino shape defining which cells to create.</param>
-        /// <param name="anchorX">The column of the placement anchor.</param>
-        /// <param name="anchorY">The row of the placement anchor.</param>
-        /// <param name="layer">The layer to place the pocket on.</param>
-        /// <returns>The number of new nodes created.</returns>
-        public int AddPocket(Polyomino shape, int anchorX, int anchorY, int layer = 0)
+        /// <summary>Converts a flat index back to its position.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">The index is outside 0..Volume-1.</exception>
+        public (int X, int Y, int Layer) GetPosition(int index)
         {
+            if ((uint)index >= (uint)Volume)
+                throw new ArgumentOutOfRangeException(nameof(index), index, "Index is outside the box.");
+
+            int layerSize = Width * Height;
+            int inLayer = index % layerSize;
+            return (inLayer % Width, inLayer / Width, index / layerSize);
+        }
+
+        /// <summary>Adds a living, empty cell.</summary>
+        /// <returns>False if a cell already exists there (a dead cell is not revived).</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The position is outside the box.</exception>
+        public bool AddCell(int x, int y, int layer = 0)
+        {
+            if (!IsValidPosition(x, y, layer))
+                throw new ArgumentOutOfRangeException(nameof(x), $"Position ({x}, {y}, {layer}) is outside the {Width}x{Height}x{Layers} box.");
+
+            return AddCellAt(GetIndex(x, y, layer));
+        }
+
+        /// <summary>Adds a living, empty cell for every cell of the shape. Cells that already exist are left as they are.</summary>
+        /// <returns>The number of cells created.</returns>
+        /// <exception cref="ArgumentException">The shape has no cells.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">Part of the shape is outside the box; nothing is created.</exception>
+        public int AddPocket(Polycube shape, int x, int y, int layer = 0)
+        {
+            if (shape.CellCount == 0)
+                throw new ArgumentException("The shape has no cells.", nameof(shape));
+
             var offsets = shape.Offsets;
+            for (int i = 0; i < offsets.Length; i++)
+            {
+                if (!IsValidPosition(x + offsets[i].Col, y + offsets[i].Row, layer + offsets[i].Layer))
+                    throw new ArgumentOutOfRangeException(nameof(shape), $"The shape at ({x}, {y}, {layer}) leaves the {Width}x{Height}x{Layers} box.");
+            }
+
             int created = 0;
-
-            // First pass: create nodes
             for (int i = 0; i < offsets.Length; i++)
             {
-                int x = anchorX + offsets[i].Col;
-                int y = anchorY + offsets[i].Row;
-
-                if (!IsValidPosition(x, y, layer))
-                    continue;
-
-                int index = GetIndex(x, y, layer);
-                if (Graph.ContainsNode(index))
-                    continue;
-
-                Graph.AddNode(index);
-                created++;
+                if (AddCellAt(GetIndex(x + offsets[i].Col, y + offsets[i].Row, layer + offsets[i].Layer)))
+                    created++;
             }
-
-            // Second pass: auto-connect 4-adjacent
-            for (int i = 0; i < offsets.Length; i++)
-            {
-                int x = anchorX + offsets[i].Col;
-                int y = anchorY + offsets[i].Row;
-
-                if (!IsValidPosition(x, y, layer))
-                    continue;
-
-                ConnectAdjacent(x, y, layer);
-            }
-
             return created;
         }
 
-        /// <summary>
-        /// Adds a single node at the specified coordinates.
-        /// Does nothing if a node already exists there.
-        /// </summary>
-        /// <returns><see langword="true"/> if a new node was created; <see langword="false"/> if one already existed.</returns>
-        public bool AddNode(int x, int y, int layer = 0)
+        /// <summary>Returns whether a cell exists at the position, living or dead.</summary>
+        public bool Exists(int x, int y, int layer = 0) => Has(x, y, layer, CellState.Exists);
+
+        /// <summary>Returns whether a living cell exists at the position.</summary>
+        public bool IsAlive(int x, int y, int layer = 0) => Has(x, y, layer, CellState.Alive);
+
+        /// <summary>Returns whether the cell at the position holds an item. A dead cell can still hold one.</summary>
+        public bool IsOccupied(int x, int y, int layer = 0) => Has(x, y, layer, CellState.Occupied);
+
+        /// <summary>Gets the item on the cell at the position. A dead cell still reports its item.</summary>
+        /// <returns>False if there is no cell there or it is empty. Read the result, not <paramref name="occupant"/>, to tell.</returns>
+        public bool TryGetOccupant(int x, int y, int layer, out TOccupant occupant)
         {
-            if (!IsValidPosition(x, y, layer))
-                throw new ArgumentOutOfRangeException(nameof(x), $"Position ({x}, {y}, {layer}) is outside bounds ({Width}x{Height}x{Layers}).");
-
-            int index = GetIndex(x, y, layer);
-            if (Graph.ContainsNode(index))
+            if (!IsOccupied(x, y, layer))
+            {
+                occupant = default!;
                 return false;
+            }
 
-            Graph.AddNode(index);
+            occupant = _occupants[GetIndex(x, y, layer)];
             return true;
         }
 
-        /// <summary>
-        /// Connects the node at the specified position to its existing 4-adjacent neighbors
-        /// (left, right, up, down) on the same layer.
-        /// </summary>
-        public void ConnectAdjacent(int x, int y, int layer = 0)
-        {
-            int index = GetIndex(x, y, layer);
-            if (!Graph.ContainsNode(index))
-                return;
-
-            TryConnect(index, x - 1, y, layer);
-            TryConnect(index, x + 1, y, layer);
-            TryConnect(index, x, y - 1, layer);
-            TryConnect(index, x, y + 1, layer);
-        }
-
-        /// <summary>
-        /// Creates a bidirectional edge between nodes at the same (x, y) position on two different layers.
-        /// Both nodes must exist.
-        /// </summary>
-        public void ConnectLayers(int x, int y, int layer1, int layer2)
-        {
-            if (!IsValidPosition(x, y, layer1) || !IsValidPosition(x, y, layer2))
-                throw new ArgumentOutOfRangeException(nameof(layer1), "One or both layer positions are out of bounds.");
-
-            int a = GetIndex(x, y, layer1);
-            int b = GetIndex(x, y, layer2);
-
-            Graph.Connect(a, b);
-        }
-
-        /// <summary>
-        /// Checks whether a polyomino shape can be placed at the specified anchor position.
-        /// Each offset must map to an existing, alive, unoccupied node.
-        /// </summary>
-        public bool CanPlace(int anchorX, int anchorY, int layer, Polyomino shape)
+        /// <summary>Returns whether every cell of the shape lands on a cell that exists, is alive and is empty.</summary>
+        public bool CanPlace(int x, int y, int layer, Polycube shape)
         {
             var offsets = shape.Offsets;
             for (int i = 0; i < offsets.Length; i++)
             {
-                int x = anchorX + offsets[i].Col;
-                int y = anchorY + offsets[i].Row;
-
-                if (!IsValidPosition(x, y, layer))
-                    return false;
-
-                int index = GetIndex(x, y, layer);
-                if (!Graph.IsAlive(index) || Graph.IsOccupied(index))
+                int cellX = x + offsets[i].Col;
+                int cellY = y + offsets[i].Row;
+                int cellLayer = layer + offsets[i].Layer;
+                if (!IsValidPosition(cellX, cellY, cellLayer) || _states[GetIndex(cellX, cellY, cellLayer)] != Placeable)
                     return false;
             }
-
-            return true;
+            return offsets.Length > 0;
         }
 
-        /// <summary>
-        /// Places an occupant on all nodes covered by the polyomino shape.
-        /// All-or-nothing: if any cell cannot be occupied, no cells are modified.
-        /// </summary>
-        /// <returns><see langword="true"/> if placement succeeded.</returns>
-        public bool Place(int anchorX, int anchorY, int layer, TOccupant occupant, Polyomino shape)
+        /// <summary>Places an item on every cell of the shape, or on none.</summary>
+        /// <returns>False, changing nothing, if <see cref="CanPlace"/> is false.</returns>
+        /// <exception cref="ArgumentException">The item is already placed. Move it with <see cref="Free"/> then <see cref="Place"/>.</exception>
+        public bool Place(int x, int y, int layer, TOccupant occupant, Polycube shape)
         {
-            if (!CanPlace(anchorX, anchorY, layer, shape))
+            if (_cellsByOccupant.ContainsKey(occupant))
+                throw new ArgumentException("The occupant is already placed.", nameof(occupant));
+            if (!CanPlace(x, y, layer, shape))
                 return false;
 
             var offsets = shape.Offsets;
-            if (!_occupancyIndex.TryGetValue(occupant, out var indices))
-            {
-                indices = new List<int>(offsets.Length);
-                _occupancyIndex[occupant] = indices;
-            }
-
+            var cells = new int[offsets.Length];
             for (int i = 0; i < offsets.Length; i++)
             {
-                int x = anchorX + offsets[i].Col;
-                int y = anchorY + offsets[i].Row;
-                int index = GetIndex(x, y, layer);
-
-                Graph.Occupy(index, occupant);
-                indices.Add(index);
+                int index = GetIndex(x + offsets[i].Col, y + offsets[i].Row, layer + offsets[i].Layer);
+                cells[i] = index;
+                _states[index] |= CellState.Occupied;
+                _occupants[index] = occupant;
             }
 
+            Array.Sort(cells);
+            _cellsByOccupant.Add(occupant, cells);
             return true;
         }
 
-        /// <summary>
-        /// Removes the specified occupant from all nodes it currently occupies.
-        /// </summary>
-        public void Free(TOccupant occupant)
+        /// <summary>Removes an item from every cell it holds, including dead ones.</summary>
+        /// <returns>False if the item was not placed.</returns>
+        public bool Free(TOccupant occupant)
         {
-            if (!_occupancyIndex.TryGetValue(occupant, out var indices))
-                return;
+            if (!_cellsByOccupant.Remove(occupant, out int[]? cells))
+                return false;
 
-            for (int i = 0; i < indices.Count; i++)
-                Graph.Clear(indices[i]);
-
-            _occupancyIndex.Remove(occupant);
+            for (int i = 0; i < cells.Length; i++)
+            {
+                _states[cells[i]] &= ~CellState.Occupied;
+                _occupants[cells[i]] = default!;
+            }
+            return true;
         }
 
-        private void TryConnect(int fromIndex, int x, int y, int layer)
-        {
-            if (!IsValidPosition(x, y, layer))
-                return;
+        /// <summary>Returns whether the item is placed.</summary>
+        public bool Contains(TOccupant occupant) => _cellsByOccupant.ContainsKey(occupant);
 
-            int toIndex = GetIndex(x, y, layer);
-            if (Graph.ContainsNode(toIndex))
-                Graph.Connect(fromIndex, toIndex);
+        /// <summary>Writes the positions an item holds, in ascending <see cref="GetIndex"/> order, dead cells included.</summary>
+        /// <returns>The number of positions written: at most <c>buffer.Length</c>, and 0 for an item that is not placed.</returns>
+        public int GetCells(TOccupant occupant, Span<(int X, int Y, int Layer)> buffer)
+        {
+            if (!_cellsByOccupant.TryGetValue(occupant, out int[]? cells))
+                return 0;
+
+            int count = Math.Min(cells.Length, buffer.Length);
+            for (int i = 0; i < count; i++)
+                buffer[i] = GetPosition(cells[i]);
+            return count;
+        }
+
+        private bool Has(int x, int y, int layer, CellState flag)
+        {
+            return IsValidPosition(x, y, layer) && (_states[GetIndex(x, y, layer)] & flag) != 0;
+        }
+
+        private bool AddCellAt(int index)
+        {
+            if (_states[index] != CellState.None)
+                return false;
+
+            _states[index] = CellState.Exists | CellState.Alive;
+            ExistingCount++;
+            AliveCount++;
+            return true;
         }
     }
 }
