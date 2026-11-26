@@ -8,6 +8,8 @@
 
 **Tech Stack:** C# `netstandard2.1`, NUnit, Unity Burst 1.8.25 for the EditMode checks.
 
+**Superseded in part:** the scratch header is two ints with no algorithm id, tests live flat in `Tests/Runtime/`, and `GridPathfinder.Costs` became read-only with `EditCosts()`; the spec's "Found during the build" section has the final state.
+
 **Spec:** `docs/superpowers/specs/2026-11-26-grid-pathfinding-design.md`
 
 ## Global Constraints

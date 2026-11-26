@@ -8,7 +8,6 @@ namespace ShadowLib.Spatial.Pathfinding
     /// </summary>
     public static class GridAStar
     {
-        private const int AlgorithmId = 1;
 
         /// <summary>Gets the scratch length a map of <paramref name="cellCount"/> cells needs.</summary>
         /// <exception cref="ArgumentException">The cell count is negative or too large.</exception>
@@ -21,7 +20,7 @@ namespace ShadowLib.Spatial.Pathfinding
         /// <param name="start">Start cell index (<c>y * width + x</c>).</param>
         /// <param name="goal">Goal cell index.</param>
         /// <param name="allowDiagonal">Whether diagonal steps are allowed. A diagonal needs both cells it passes between to be walkable.</param>
-        /// <param name="scratch">Working memory of at least <see cref="ScratchLength"/> ints. Zeroed when first created, then reusable; one search at a time.</param>
+        /// <param name="scratch">Working memory of at least <see cref="ScratchLength"/> ints. Zeroed when first created, then reusable by this search and by <see cref="GridJumpPointSearch"/> on any map size; one search at a time.</param>
         /// <param name="path">Receives every cell from start to goal. May be empty to ask only for the length and cost.</param>
         /// <param name="pathLength">Cells in the path, start and goal included; the length needed when the buffer is too small; 0 when there is no path.</param>
         /// <param name="pathCost">Sum of step costs: <see cref="GridPathing.OrthogonalStep"/> or <see cref="GridPathing.DiagonalStep"/> times the cost of each cell entered.</param>
@@ -37,7 +36,7 @@ namespace ShadowLib.Spatial.Pathfinding
             int cellCount = GridPathing.RequireMap(costs.Length, width, height);
             GridPathing.RequireCell(start, cellCount, "start");
             GridPathing.RequireCell(goal, cellCount, "goal");
-            int generation = PathScratch.Begin(scratch, cellCount, AlgorithmId);
+            int generation = PathScratch.Begin(scratch, cellCount);
             if (costs[start] == 0 || costs[goal] == 0)
                 return PathStatus.NoPath;
 

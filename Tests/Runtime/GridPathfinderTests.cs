@@ -37,7 +37,7 @@ namespace ShadowLib.Tests
         {
             var map = PathTestMaps.Parse(rows);
             var pathfinder = new GridPathfinder(map.Width, map.Height);
-            map.Costs.CopyTo(pathfinder.Costs);
+            map.Costs.CopyTo(pathfinder.EditCosts());
             return pathfinder;
         }
 
@@ -153,6 +153,70 @@ namespace ShadowLib.Tests
 
             Assert.IsFalse(pathfinder.TryGetFlowStep(0, 0, out _, out _));
             Assert.AreEqual(10, pathfinder.GetFlowDistance(2, 0));
+        }
+
+        [Test]
+        public void FlowField_GoesStaleOnBakeAndEditCosts_ButNotOnReadingCosts()
+        {
+            var grid = new Grid2D<TerrainCell, int>(4, 1, 1f, (x, y) => new TerrainCell());
+            var pathfinder = new GridPathfinder(4, 1);
+            var goal = new[] { (3, 0) };
+
+            pathfinder.BuildFlowField(goal);
+            Assert.AreEqual(4, pathfinder.Costs.Length);
+            Assert.IsTrue(pathfinder.TryGetFlowStep(0, 0, out _, out _));
+
+            pathfinder.EditCosts()[1] = 3;
+            Assert.IsFalse(pathfinder.TryGetFlowStep(0, 0, out _, out _));
+
+            pathfinder.BuildFlowField(goal);
+            Assert.AreEqual(50, pathfinder.GetFlowDistance(0, 0));
+
+            pathfinder.Bake(grid, cell => cell.Terrain);
+            Assert.IsFalse(pathfinder.TryGetFlowStep(0, 0, out _, out _));
+        }
+
+        [Test]
+        public void Bake_ThatThrowsPartWay_StillMarksTheFlowFieldStale()
+        {
+            var grid = new Grid2D<TerrainCell, int>(4, 1, 1f, (x, y) => new TerrainCell());
+            var pathfinder = new GridPathfinder(4, 1);
+            pathfinder.BuildFlowField(new[] { (3, 0) });
+
+            Assert.Throws<InvalidOperationException>(() => pathfinder.Bake(grid, cell => cell.X == 2 ? throw new InvalidOperationException() : (byte)0));
+
+            Assert.IsFalse(pathfinder.TryGetFlowStep(3, 0, out _, out _));
+            Assert.AreEqual(int.MaxValue, pathfinder.GetFlowDistance(0, 0));
+        }
+
+        [Test]
+        public void MixingBothSearchesOnOnePathfinder_KeepsAnsweringCorrectly()
+        {
+            var pathfinder = FromRows(
+                "....#...",
+                ".##.#.#.",
+                ".#....#.",
+                ".#.##.#.",
+                "...#....");
+
+            for (int i = 0; i < 6; i++)
+            {
+                var weighted = pathfinder.FindPath((0, 0), (7, 4), Span<(int X, int Y)>.Empty, out _, out int weightedCost, allowDiagonal: i % 2 == 0);
+                var uniform = pathfinder.FindPath((0, 0), (7, 4), Span<(int X, int Y)>.Empty, out _, out int uniformCost, allowDiagonal: i % 2 == 0, uniformCost: true);
+
+                Assert.AreEqual(PathStatus.PathBufferTooSmall, weighted);
+                Assert.AreEqual(PathStatus.PathBufferTooSmall, uniform);
+                Assert.AreEqual(weightedCost, uniformCost, $"round {i}");
+            }
+        }
+
+        [Test]
+        public void BadCoordinate_NamesTheRightArgument()
+        {
+            var pathfinder = new GridPathfinder(3, 2);
+
+            Assert.AreEqual("x", Assert.Throws<ArgumentOutOfRangeException>(() => pathfinder.SetCost(3, 0, 1))!.ParamName);
+            Assert.AreEqual("y", Assert.Throws<ArgumentOutOfRangeException>(() => pathfinder.SetCost(0, 2, 1))!.ParamName);
         }
 
         [Test]

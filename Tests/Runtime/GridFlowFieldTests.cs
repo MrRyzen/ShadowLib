@@ -120,6 +120,20 @@ namespace ShadowLib.Tests
         }
 
         [Test]
+        public void DistanceBeyondIntRange_IsUnreachable_NotAWrappedNumber()
+        {
+            var map = new PathMap { Width = 842_152, Height = 1, Costs = new byte[842_152] };
+            map.Costs.AsSpan().Fill(255);
+
+            var field = Build(map, false, 0);
+
+            Assert.AreEqual(2_147_482_500, field.Distances[842_150]);
+            Assert.AreEqual(1, field.Directions[842_150]);
+            Assert.AreEqual(int.MaxValue, field.Distances[842_151]);
+            Assert.AreEqual(GridFlowField.NoDirection, field.Directions[842_151]);
+        }
+
+        [Test]
         public void RandomMaps_DistancesMatchAStar_AndFollowingDirectionsArrivesAtThatCost([Values(false, true)] bool allowDiagonal)
         {
             var rng = new Xoshiro128StarStar(allowDiagonal ? 601UL : 600UL);

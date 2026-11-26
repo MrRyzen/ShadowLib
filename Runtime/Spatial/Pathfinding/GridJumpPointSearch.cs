@@ -4,12 +4,12 @@ namespace ShadowLib.Spatial.Pathfinding
 
     /// <summary>
     /// Jump Point Search over a byte cost map read as walkable or blocked: every non-zero cell costs 1.
-    /// Returns a path as cheap as <see cref="GridAStar"/> would on that uniform map, usually much faster on open maps.
+    /// Returns a path as cheap as <see cref="GridAStar"/> would on that uniform map. Much faster than A* on rooms,
+    /// corridors and caves; slower than A* on wide-open ground and on short trips across it.
     /// Allocation-free and usable from Burst jobs.
     /// </summary>
     public static class GridJumpPointSearch
     {
-        private const int AlgorithmId = 2;
         private const int None = -1;
 
         /// <summary>Gets the scratch length a map of <paramref name="cellCount"/> cells needs.</summary>
@@ -23,7 +23,7 @@ namespace ShadowLib.Spatial.Pathfinding
         /// <param name="start">Start cell index (<c>y * width + x</c>).</param>
         /// <param name="goal">Goal cell index.</param>
         /// <param name="allowDiagonal">Whether diagonal steps are allowed. A diagonal needs both cells it passes between to be walkable.</param>
-        /// <param name="scratch">Working memory of at least <see cref="ScratchLength"/> ints. Zeroed when first created, then reusable; one search at a time.</param>
+        /// <param name="scratch">Working memory of at least <see cref="ScratchLength"/> ints. Zeroed when first created, then reusable by this search and by <see cref="GridAStar"/> on any map size; one search at a time.</param>
         /// <param name="path">Receives every cell from start to goal, not only the jump points. May be empty to ask only for the length and cost.</param>
         /// <param name="pathLength">Cells in the path, start and goal included; the length needed when the buffer is too small; 0 when there is no path.</param>
         /// <param name="pathCost"><see cref="GridPathing.OrthogonalStep"/> per orthogonal step plus <see cref="GridPathing.DiagonalStep"/> per diagonal step.</param>
@@ -39,7 +39,7 @@ namespace ShadowLib.Spatial.Pathfinding
             int cellCount = GridPathing.RequireMap(costs.Length, width, height);
             GridPathing.RequireCell(start, cellCount, "start");
             GridPathing.RequireCell(goal, cellCount, "goal");
-            int generation = PathScratch.Begin(scratch, cellCount, AlgorithmId);
+            int generation = PathScratch.Begin(scratch, cellCount);
             if (costs[start] == 0 || costs[goal] == 0)
                 return PathStatus.NoPath;
 
@@ -75,22 +75,22 @@ namespace ShadowLib.Spatial.Pathfinding
                     for (int direction = 0; direction < directions; direction++)
                     {
                         if (GridPathing.CanStep(costs, width, height, x, y, direction, out _))
-                            Visit(costs, width, height, scratch, generation, goal, allowDiagonal, ref open, current, GridPathing.DirectionX(direction), GridPathing.DirectionY(direction));
+                            Visit(costs, width, height, scratch, generation, goal, allowDiagonal, ref open, current, x, y, GridPathing.DirectionX(direction), GridPathing.DirectionY(direction));
                     }
                 }
                 else if (!allowDiagonal)
                 {
                     if (dx != 0)
                     {
-                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, 0, -1);
-                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, 0, 1);
-                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, dx, 0);
+                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, x, y, 0, -1);
+                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, x, y, 0, 1);
+                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, x, y, dx, 0);
                     }
                     else
                     {
-                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, -1, 0);
-                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, 1, 0);
-                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, 0, dy);
+                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, x, y, -1, 0);
+                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, x, y, 1, 0);
+                        Visit(costs, width, height, scratch, generation, goal, false, ref open, current, x, y, 0, dy);
                     }
                 }
                 else if (dx != 0 && dy != 0)
@@ -98,11 +98,11 @@ namespace ShadowLib.Spatial.Pathfinding
                     bool vertical = GridPathing.IsWalkable(costs, width, height, x, y + dy);
                     bool horizontal = GridPathing.IsWalkable(costs, width, height, x + dx, y);
                     if (vertical)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, 0, dy);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, 0, dy);
                     if (horizontal)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, dx, 0);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, dx, 0);
                     if (vertical && horizontal)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, dx, dy);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, dx, dy);
                 }
                 else if (dx != 0)
                 {
@@ -111,17 +111,17 @@ namespace ShadowLib.Spatial.Pathfinding
                     bool down = GridPathing.IsWalkable(costs, width, height, x, y - 1);
                     if (ahead)
                     {
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, dx, 0);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, dx, 0);
                         if (up)
-                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, dx, 1);
+                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, dx, 1);
                         if (down)
-                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, dx, -1);
+                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, dx, -1);
                     }
 
                     if (up)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, 0, 1);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, 0, 1);
                     if (down)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, 0, -1);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, 0, -1);
                 }
                 else
                 {
@@ -130,17 +130,17 @@ namespace ShadowLib.Spatial.Pathfinding
                     bool left = GridPathing.IsWalkable(costs, width, height, x - 1, y);
                     if (ahead)
                     {
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, 0, dy);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, 0, dy);
                         if (right)
-                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, 1, dy);
+                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, 1, dy);
                         if (left)
-                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, -1, dy);
+                            Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, -1, dy);
                     }
 
                     if (right)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, 1, 0);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, 1, 0);
                     if (left)
-                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, -1, 0);
+                        Visit(costs, width, height, scratch, generation, goal, true, ref open, current, x, y, -1, 0);
                 }
             }
 
@@ -149,10 +149,8 @@ namespace ShadowLib.Spatial.Pathfinding
 
         private static void Visit(
             ReadOnlySpan<byte> costs, int width, int height, Span<int> scratch, int generation,
-            int goal, bool allowDiagonal, ref int open, int current, int dx, int dy)
+            int goal, bool allowDiagonal, ref int open, int current, int x, int y, int dx, int dy)
         {
-            int x = current % width;
-            int y = current / width;
             int jumpPoint;
             if (!allowDiagonal)
                 jumpPoint = dx != 0 ? ScanRow(costs, width, height, goal, x + dx, y, dx) : ScanColumnWithRows(costs, width, height, goal, x, y + dy, dy);
@@ -197,18 +195,6 @@ namespace ShadowLib.Spatial.Pathfinding
                 stamps[jumpPoint] = generation;
                 PathHeap.Push(heap, positions, estimates, costsSoFar, ref open, jumpPoint);
             }
-        }
-
-        private static bool HasForcedTurn(ReadOnlySpan<byte> costs, int width, int height, int x, int y, int dx, int dy)
-        {
-            if (dx != 0)
-            {
-                return (GridPathing.IsWalkable(costs, width, height, x, y - 1) && !GridPathing.IsWalkable(costs, width, height, x - dx, y - 1))
-                    || (GridPathing.IsWalkable(costs, width, height, x, y + 1) && !GridPathing.IsWalkable(costs, width, height, x - dx, y + 1));
-            }
-
-            return (GridPathing.IsWalkable(costs, width, height, x - 1, y) && !GridPathing.IsWalkable(costs, width, height, x - 1, y - dy))
-                || (GridPathing.IsWalkable(costs, width, height, x + 1, y) && !GridPathing.IsWalkable(costs, width, height, x + 1, y - dy));
         }
 
         private static int ScanStraight(ReadOnlySpan<byte> costs, int width, int height, int goal, int x, int y, int dx, int dy)
@@ -279,7 +265,6 @@ namespace ShadowLib.Spatial.Pathfinding
             {
                 int cell = y * width + x;
                 if (cell == goal
-                    || HasForcedTurn(costs, width, height, x, y, 0, dy)
                     || ScanRow(costs, width, height, goal, x + 1, y, 1) != None
                     || ScanRow(costs, width, height, goal, x - 1, y, -1) != None)
                     return cell;

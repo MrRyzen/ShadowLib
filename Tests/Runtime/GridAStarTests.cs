@@ -157,32 +157,76 @@ namespace ShadowLib.Tests
         }
 
         [Test]
+        public void RandomMaps_CheapTerrainAndManyGoals_StayAsCheapAsPlainDijkstra([Values(false, true)] bool allowDiagonal)
+        {
+            var rng = new Xoshiro128StarStar(allowDiagonal ? 511UL : 510UL);
+            int found = 0;
+            for (int i = 0; i < 150; i++)
+            {
+                var map = PathTestMaps.Random(rng, 28, 55, 2);
+                long[] expected = PathTestMaps.ReferenceDistancesFrom(map, map.Start, allowDiagonal);
+                var scratch = new int[GridAStar.ScratchLength(map.CellCount)];
+                for (int query = 0; query < 12; query++)
+                {
+                    int goal = rng.Range(0, map.CellCount);
+                    var status = GridAStar.FindPath(map.Costs, map.Width, map.Height, map.Start, goal, allowDiagonal, scratch, Span<int>.Empty, out _, out int cost);
+                    if (expected[goal] == long.MaxValue || map.Costs[map.Start] == 0)
+                    {
+                        Assert.AreEqual(PathStatus.NoPath, status, PathTestMaps.Describe(map, allowDiagonal) + "goal " + goal);
+                        continue;
+                    }
+
+                    found++;
+                    Assert.AreEqual(expected[goal], cost, PathTestMaps.Describe(map, allowDiagonal) + "goal " + goal);
+                }
+            }
+
+            Assert.Greater(found, 300);
+        }
+
+        [Test]
+        public void OpenGround_TieBreakIsPinned([Values(false, true)] bool allowDiagonal)
+        {
+            var map = PathTestMaps.Parse(
+                "S.....",
+                "......",
+                "......",
+                "......",
+                "......",
+                ".....G");
+            if (allowDiagonal)
+                map.Goal = map.Index(5, 2);
+
+            Assert.AreEqual(PathStatus.Found, Find(map, allowDiagonal, out int[] path, out _));
+            CollectionAssert.AreEqual(
+                allowDiagonal ? new[] { 0, 7, 14, 15, 16, 17 } : new[] { 0, 1, 2, 3, 4, 5, 11, 17, 23, 29, 35 },
+                path);
+        }
+
+        [Test]
         public void PathBuffer_TooSmallOrEmpty_ReportsTheLengthNeeded_AndIsLeftUntouched()
         {
             var map = PathTestMaps.Parse("S...G");
             var scratch = new int[GridAStar.ScratchLength(5)];
-            var small = new[] { -7, -7, -7 };
+            var small = new[] { -7, -7, -7, -7 };
 
             var status = GridAStar.FindPath(map.Costs, 5, 1, 0, 4, false, scratch, small, out int length, out int cost);
             var emptyStatus = GridAStar.FindPath(map.Costs, 5, 1, 0, 4, false, scratch, Span<int>.Empty, out int emptyLength, out int emptyCost);
 
             Assert.AreEqual(PathStatus.PathBufferTooSmall, status);
             Assert.AreEqual((5, 40), (length, cost));
-            CollectionAssert.AreEqual(new[] { -7, -7, -7 }, small);
+            CollectionAssert.AreEqual(new[] { -7, -7, -7, -7 }, small);
             Assert.AreEqual(PathStatus.PathBufferTooSmall, emptyStatus);
             Assert.AreEqual((5, 40), (emptyLength, emptyCost));
         }
 
         [Test]
-        public void Scratch_ReusedAcrossQueriesMapSizesAndAGenerationWrap_AnswersLikeAFreshOne()
+        public void Scratch_ReusedAcrossQueriesAndMapSizes_AnswersLikeAFreshOne()
         {
             var rng = new Xoshiro128StarStar(77UL);
             var shared = new int[GridAStar.ScratchLength(24 * 24)];
             for (int i = 0; i < 500; i++)
             {
-                if (i == 250)
-                    shared[0] = int.MaxValue - 2;
-
                 var map = PathTestMaps.Random(rng, 24, 40, 5);
                 var sharedPath = new int[map.CellCount];
                 var freshPath = new int[map.CellCount];
@@ -199,8 +243,8 @@ namespace ShadowLib.Tests
         [Test]
         public void RouteCostBeyondIntRange_IsNoPath_NotAWrappedNumber()
         {
-            var fits = new byte[800_000];
-            var overflows = new byte[900_000];
+            var fits = new byte[842_151];
+            var overflows = new byte[842_152];
             fits.AsSpan().Fill(255);
             overflows.AsSpan().Fill(255);
             var scratch = new int[GridAStar.ScratchLength(overflows.Length)];
@@ -209,7 +253,7 @@ namespace ShadowLib.Tests
             var overflowStatus = GridAStar.FindPath(overflows, overflows.Length, 1, 0, overflows.Length - 1, false, scratch, Span<int>.Empty, out _, out int overflowCost);
 
             Assert.AreEqual(PathStatus.PathBufferTooSmall, fitsStatus);
-            Assert.AreEqual(799_999 * 2550, fitsCost);
+            Assert.AreEqual(2_147_482_500, fitsCost);
             Assert.AreEqual(PathStatus.NoPath, overflowStatus);
             Assert.AreEqual(0, overflowCost);
         }
@@ -258,6 +302,7 @@ namespace ShadowLib.Tests
             Assert.Throws<ArgumentException>(() => GridAStar.FindPath(costs, 3, 2, -1, 1, false, scratch, path, out _, out _));
             Assert.Throws<ArgumentException>(() => GridAStar.FindPath(costs, 3, 2, 0, 6, false, scratch, path, out _, out _));
             Assert.Throws<ArgumentException>(() => GridAStar.FindPath(costs, 3, 2, 0, 1, false, new int[scratch.Length - 1], path, out _, out _));
+            Assert.Throws<ArgumentException>(() => GridAStar.FindPath(new byte[0], int.MaxValue / 14, 1, 0, 0, false, scratch, path, out _, out _));
             Assert.Throws<ArgumentException>(() => GridAStar.ScratchLength(-1));
             Assert.Throws<ArgumentException>(() => GridAStar.ScratchLength(int.MaxValue / 2));
         }

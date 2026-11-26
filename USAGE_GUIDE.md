@@ -585,8 +585,9 @@ if (pathfinder.TryGetFlowStep(agentX, agentY, out int stepX, out int stepY))
 ```
 
 - `PathStatus.NoPath` means the start or goal is blocked or nothing connects them. `PathBufferTooSmall` means a path exists but does not fit: `length` then holds the size needed, and nothing was written. Pass an empty span to ask only "is it reachable, and at what cost".
-- The pathfinder does not watch the grid. After the grid changes, call `Bake` again, or `SetCost(x, y, cost)` for the cells that changed. Changing costs makes the flow field stale: `TryGetFlowStep` returns false until `BuildFlowField` runs again.
-- One `GridPathfinder` is for one thread. It allocates its buffers on first use and never after.
+- The pathfinder does not watch the grid. After the grid changes, call `Bake` again, or `SetCost(x, y, cost)` for the cells that changed. Changing costs through `Bake`, `SetCost` or `EditCosts()` makes the flow field stale: `TryGetFlowStep` returns false until `BuildFlowField` runs again.
+- One `GridPathfinder` is for one thread. It allocates its buffers on first use; after that only a goal list longer than any before allocates.
+- `Costs` is a read-only view. For bulk edits call `EditCosts()`, which hands out the writable span and marks the flow field stale; ask for it again for each round of edits rather than keeping it.
 
 #### Costs and movement
 
@@ -597,7 +598,7 @@ if (pathfinder.TryGetFlowStep(agentX, agentY, out int stepX, out int stepY))
 
 #### Which is faster
 
-Measured on a 512x512 map in plain .NET (`GridPathfindingBenchmark`, eight-way, per query): on a map of 32x32 rooms with one door per wall, A* 1.8 ms and JPS 0.09 ms; on generated caves, A* 0.68 ms and JPS 0.24 ms; on a completely open map, A* 0.05 ms and JPS 0.39 ms. So use JPS for rooms, corridors and caves, and A* for wide-open ground or weighted terrain. A flow field for the whole map took 13 to 30 ms to build; reading it is one array lookup per agent.
+Measured on a 512x512 map in plain .NET (`GridPathfindingBenchmark`, eight-way, per query): on a map of 32x32 rooms with one door per wall, A* 1.8 ms and JPS 0.09 ms; on generated caves, A* 0.68 ms and JPS 0.24 ms; on a completely open map, A* 0.05 ms and JPS 0.39 ms. So use JPS for rooms, corridors and caves, and A* for wide-open ground or weighted terrain. The gap on open ground is wider for four-way movement (A* 0.12 ms, JPS 1.2 ms) and for short trips, because a JPS scan runs to the map edge however near the goal is. A flow field for the whole map took 13 to 30 ms to build; reading it is one array lookup per agent.
 
 #### In jobs / Burst
 
@@ -623,7 +624,7 @@ struct FindPathJob : IJob
 ```
 
 - `GridJumpPointSearch.FindPath` has the same signature. `GridFlowField.Build` fills a `distances` span (`int.MaxValue` = cannot reach a goal) and a `directions` span (0 E, 1 W, 2 N, 3 S, 4 NE, 5 NW, 6 SE, 7 SW, `GridFlowField.NoDirection` on goals and unreachable cells); `GridFlowField.NextCell`, `StepX` and `StepY` decode a direction.
-- A scratch buffer is reused across queries without clearing. It may be reused on a different map size or by the other search; it then clears itself once.
+- A scratch buffer is reused across queries without clearing. `GridAStar` and `GridJumpPointSearch` scratches are interchangeable and may move between map sizes (a size change clears it once). Anything else handed in as a search scratch must be zeroed first. A `GridFlowField` scratch is separate and its contents never matter.
 - Spans cannot be job fields. Keep `NativeArray` fields and call `.AsSpan()` inside `Execute`.
 
 ## Procedural

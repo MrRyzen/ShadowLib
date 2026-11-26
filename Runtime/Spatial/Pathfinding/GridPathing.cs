@@ -8,7 +8,7 @@ namespace ShadowLib.Spatial.Pathfinding
         /// <summary>A path was found and written.</summary>
         Found,
 
-        /// <summary>The start or goal is blocked, or no route connects them.</summary>
+        /// <summary>The start or goal is blocked, no route connects them, or the cheapest route costs more than an int can hold.</summary>
         NoPath,
 
         /// <summary>A path exists but the buffer cannot hold it; the length needed is reported and nothing is written.</summary>
@@ -74,6 +74,8 @@ namespace ShadowLib.Spatial.Pathfinding
                 throw new ArgumentException("Width must be greater than zero.", "width");
             if (height <= 0)
                 throw new ArgumentException("Height must be greater than zero.", "height");
+            if ((long)width + height > int.MaxValue / DiagonalStep)
+                throw new ArgumentException("The map is too wide or too tall.", "width");
             if ((long)width * height != costsLength)
                 throw new ArgumentException("The cost map length must be width times height.", "costs");
 
@@ -96,7 +98,7 @@ namespace ShadowLib.Spatial.Pathfinding
         internal const int HeapPositions = 4;
         internal const int Heap = 5;
 
-        private const int HeaderLength = 3;
+        private const int HeaderLength = 2;
         private const int RegionCount = 6;
 
         internal static int Length(int cellCount)
@@ -107,17 +109,16 @@ namespace ShadowLib.Spatial.Pathfinding
             return HeaderLength + RegionCount * cellCount;
         }
 
-        internal static int Begin(Span<int> scratch, int cellCount, int algorithmId)
+        internal static int Begin(Span<int> scratch, int cellCount)
         {
             if (scratch.Length < Length(cellCount))
                 throw new ArgumentException("The scratch buffer is too short; size it with ScratchLength.", "scratch");
 
-            if (scratch[1] != cellCount || scratch[2] != algorithmId || scratch[0] == int.MaxValue)
+            if (scratch[1] != cellCount || scratch[0] == int.MaxValue)
             {
                 for (int i = 0; i < HeaderLength + cellCount; i++)
                     scratch[i] = 0;
                 scratch[1] = cellCount;
-                scratch[2] = algorithmId;
             }
 
             return ++scratch[0];

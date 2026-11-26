@@ -116,14 +116,14 @@ namespace ShadowLib.Tests
         {
             var map = PathTestMaps.Parse("S...G");
             var scratch = new int[GridJumpPointSearch.ScratchLength(5)];
-            var small = new[] { -7, -7, -7 };
+            var small = new[] { -7, -7, -7, -7 };
 
             var status = GridJumpPointSearch.FindPath(map.Costs, 5, 1, 0, 4, true, scratch, small, out int length, out int cost);
             var emptyStatus = GridJumpPointSearch.FindPath(map.Costs, 5, 1, 0, 4, true, scratch, Span<int>.Empty, out int emptyLength, out _);
 
             Assert.AreEqual(PathStatus.PathBufferTooSmall, status);
             Assert.AreEqual((5, 40), (length, cost));
-            CollectionAssert.AreEqual(new[] { -7, -7, -7 }, small);
+            CollectionAssert.AreEqual(new[] { -7, -7, -7, -7 }, small);
             Assert.AreEqual(PathStatus.PathBufferTooSmall, emptyStatus);
             Assert.AreEqual(5, emptyLength);
         }
@@ -179,6 +179,25 @@ namespace ShadowLib.Tests
             Assert.AreEqual(PathStatus.Found, Find(map, true, out int[] path, out int cost));
             CollectionAssert.AreEqual(new[] { 0, 1, 2, 10, 18, 19, 20, 12, 4, 5, 6, 7, 15, 23, 31, 39 }, path);
             Assert.AreEqual(150, cost);
+        }
+
+        [Test]
+        public void OpenGround_TieBreakIsPinned([Values(false, true)] bool allowDiagonal)
+        {
+            var map = PathTestMaps.Parse(
+                "S.....",
+                "......",
+                "......",
+                "......",
+                "......",
+                ".....G");
+            if (allowDiagonal)
+                map.Goal = map.Index(5, 2);
+
+            Assert.AreEqual(PathStatus.Found, Find(map, allowDiagonal, out int[] path, out _));
+            CollectionAssert.AreEqual(
+                allowDiagonal ? new[] { 0, 7, 14, 15, 16, 17 } : new[] { 0, 6, 12, 18, 24, 30, 31, 32, 33, 34, 35 },
+                path);
         }
 
         [Test]

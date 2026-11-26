@@ -69,6 +69,7 @@ namespace ShadowLib.Spatial.Pathfinding
                 PathHeap.Push(heap, positions, distances, distances, ref open, goal);
             }
 
+            // ponytail: binary heap; a bucket queue would build low-cost maps several times faster
             int directionCount = allowDiagonal ? GridPathing.AllDirections : GridPathing.OrthogonalDirections;
             while (open > 0)
             {

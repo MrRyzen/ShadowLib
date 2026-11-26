@@ -36,7 +36,8 @@ namespace ShadowLib.Spatial.Pathfinding
             _pathCells = new int[_costs.Length];
         }
 
-        private const int MaxCellCount = (int.MaxValue - 3) / 6;
+        private const int MaxArrayLength = 0x7FFFFFC7;
+        private const int MaxCellCount = (MaxArrayLength - 2) / 6;
 
         /// <summary>Gets the map width.</summary>
         public int Width { get; }
@@ -45,23 +46,26 @@ namespace ShadowLib.Spatial.Pathfinding
         public int Height { get; }
 
         /// <summary>
-        /// Gets the cost map for direct editing, one byte per cell in row order (<c>y * Width + x</c>): 0 is blocked,
-        /// 1 to 255 is the cost of entering the cell. Reading this marks the flow field as out of date.
+        /// Gets the cost map, one byte per cell in row order (<c>y * Width + x</c>): 0 is blocked,
+        /// 1 to 255 is the cost of entering the cell.
         /// </summary>
-        public Span<byte> Costs
+        public ReadOnlySpan<byte> Costs => _costs;
+
+        /// <summary>
+        /// Gets the cost map for bulk editing and marks the flow field as out of date. Ask for it again for each
+        /// round of edits: writes through a span kept from before <see cref="BuildFlowField"/> are not noticed.
+        /// </summary>
+        public Span<byte> EditCosts()
         {
-            get
-            {
-                _flowIsCurrent = false;
-                return _costs;
-            }
+            _flowIsCurrent = false;
+            return _costs;
         }
 
         /// <summary>Sets one cell's cost; 0 blocks it. Marks the flow field as out of date.</summary>
         /// <exception cref="ArgumentOutOfRangeException">The cell is outside the map.</exception>
         public void SetCost(int x, int y, byte cost)
         {
-            _costs[IndexOf(x, y, nameof(x))] = cost;
+            _costs[IndexOf(x, y, nameof(x), nameof(y))] = cost;
             _flowIsCurrent = false;
         }
 
@@ -82,14 +86,13 @@ namespace ShadowLib.Spatial.Pathfinding
             if (grid.Width != Width || grid.Height != Height)
                 throw new ArgumentException("The grid is not the same size as the pathfinder.", nameof(grid));
 
+            _flowIsCurrent = false;
             for (int y = 0; y < Height; y++)
             {
                 var row = grid.GetRow(y);
                 for (int x = 0; x < Width; x++)
                     _costs[y * Width + x] = costOf(row[x]);
             }
-
-            _flowIsCurrent = false;
         }
 
         /// <summary>Finds a cheapest path between two cells.</summary>
@@ -99,14 +102,14 @@ namespace ShadowLib.Spatial.Pathfinding
         /// <param name="pathLength">Cells in the path; the length needed when the buffer is too small; 0 when there is no path.</param>
         /// <param name="pathCost">Sum of step costs (see <see cref="GridPathing"/>).</param>
         /// <param name="allowDiagonal">Whether diagonal steps are allowed.</param>
-        /// <param name="uniformCost">True to ignore cost weights and use Jump Point Search, which is faster on open walkable/blocked maps.</param>
+        /// <param name="uniformCost">True to ignore cost weights and use Jump Point Search: faster on rooms, corridors and caves, slower on wide-open ground.</param>
         /// <exception cref="ArgumentOutOfRangeException">The start or goal is outside the map.</exception>
         public PathStatus FindPath(
             (int X, int Y) start, (int X, int Y) goal, Span<(int X, int Y)> path,
             out int pathLength, out int pathCost, bool allowDiagonal = false, bool uniformCost = false)
         {
-            int startCell = IndexOf(start.X, start.Y, nameof(start));
-            int goalCell = IndexOf(goal.X, goal.Y, nameof(goal));
+            int startCell = IndexOf(start.X, start.Y, nameof(start), nameof(start));
+            int goalCell = IndexOf(goal.X, goal.Y, nameof(goal), nameof(goal));
             _searchScratch ??= new int[GridAStar.ScratchLength(_costs.Length)];
 
             var status = uniformCost
@@ -132,7 +135,7 @@ namespace ShadowLib.Spatial.Pathfinding
             if (_goalCells.Length < goals.Length)
                 _goalCells = new int[goals.Length];
             for (int i = 0; i < goals.Length; i++)
-                _goalCells[i] = IndexOf(goals[i].X, goals[i].Y, nameof(goals));
+                _goalCells[i] = IndexOf(goals[i].X, goals[i].Y, nameof(goals), nameof(goals));
 
             _flowScratch ??= new int[GridFlowField.ScratchLength(_costs.Length)];
             _flowDistances ??= new int[_costs.Length];
@@ -148,7 +151,7 @@ namespace ShadowLib.Spatial.Pathfinding
         /// <exception cref="ArgumentOutOfRangeException">The cell is outside the map.</exception>
         public bool TryGetFlowStep(int x, int y, out int stepX, out int stepY)
         {
-            int cell = IndexOf(x, y, nameof(x));
+            int cell = IndexOf(x, y, nameof(x), nameof(y));
             byte direction = _flowIsCurrent ? _flowDirections![cell] : GridFlowField.NoDirection;
             stepX = GridFlowField.StepX(direction);
             stepY = GridFlowField.StepY(direction);
@@ -159,14 +162,16 @@ namespace ShadowLib.Spatial.Pathfinding
         /// <exception cref="ArgumentOutOfRangeException">The cell is outside the map.</exception>
         public int GetFlowDistance(int x, int y)
         {
-            int cell = IndexOf(x, y, nameof(x));
+            int cell = IndexOf(x, y, nameof(x), nameof(y));
             return _flowIsCurrent ? _flowDistances![cell] : int.MaxValue;
         }
 
-        private int IndexOf(int x, int y, string paramName)
+        private int IndexOf(int x, int y, string xName, string yName)
         {
-            if ((uint)x >= (uint)Width || (uint)y >= (uint)Height)
-                throw new ArgumentOutOfRangeException(paramName, $"Cell ({x}, {y}) is outside the {Width}x{Height} map.");
+            if ((uint)x >= (uint)Width)
+                throw new ArgumentOutOfRangeException(xName, $"Cell ({x}, {y}) is outside the {Width}x{Height} map.");
+            if ((uint)y >= (uint)Height)
+                throw new ArgumentOutOfRangeException(yName, $"Cell ({x}, {y}) is outside the {Width}x{Height} map.");
 
             return y * Width + x;
         }
