@@ -104,11 +104,13 @@ public static class GridFlowField
 **Result contract for `FindPath`:**
 
 - `Found`: `path[0..pathLength)` holds every cell from `start` to `goal` inclusive, each one step from the last. `pathCost` is the sum of step costs. `start == goal` is `Found` with length 1 and cost 0.
-- `NoPath`: start or goal is blocked, or no route exists. `pathLength` and `pathCost` are 0.
+- `NoPath`: start or goal is blocked (including `start == goal` on a blocked cell), or no route exists. `pathLength` and `pathCost` are 0.
 - `PathBufferTooSmall`: a route exists but does not fit. `pathLength` is the length needed, `pathCost` is valid, `path` is untouched. Passing an empty `path` is the supported way to ask only for reachability and cost.
 - JPS returns the full cell-by-cell path, not just jump points, so the two searches are interchangeable.
 
 **Optimality:** A* returns a cheapest path. JPS returns a cheapest path on the uniform-cost reading of the map; its `pathCost` equals what A* reports on the same map with every walkable cost set to 1. When several cheapest paths exist the two may return different ones.
+
+**Heuristic:** Manhattan times 10 for four-way, octile (10 / 14) for eight-way. Both are admissible because the cheapest cell cost is 1.
 
 **Determinism:** ties in the open set break by lowest total estimate, then highest cost so far, then lowest cell index. Neighbours are visited in a fixed order. So a given map and query always produce the same path.
 
@@ -116,7 +118,7 @@ public static class GridFlowField
 
 **Errors** (thrown; under Burst these abort in a player build like any other Burst exception, matching `Xoshiro128`'s range guards): `width` or `height` not positive, `costs.Length != width * height`, `start` / `goal` / any flow-field goal outside `0..cellCount-1`, scratch shorter than `ScratchLength`, `distances` or `directions` shorter than the cell count. An empty `goals` span is not an error: every cell becomes unreachable.
 
-**Flow field detail:** a multi-source Dijkstra outward from the goals. `distances[c]` is the cheapest cost of walking from `c` to any goal (entering costs as above); `directions[c]` is the first step of that walk. Direction codes 0–7 are a fixed, documented order (E, W, N, S, then the four diagonals; N is +Y to match `RandomWalk`'s "up"). Blocked goals are ignored.
+**Flow field detail:** a multi-source Dijkstra outward from the goals. `distances[c]` is the cheapest cost of walking from `c` to any goal (entering costs as above); `directions[c]` is the first step of that walk. A walker stepping from `c` to neighbour `n` pays for entering `n`, so the outward search from the goals relaxes `distances[c] = distances[n] + step * costs[n]`; a goal cell's own cost is never paid. Direction codes 0–7 are a fixed, documented order (E, W, N, S, NE, NW, SE, SW; N is +Y to match `RandomWalk`'s "up"). Blocked goals are ignored.
 
 ### Layer 2: the `Grid2D` wrapper (managed)
 
