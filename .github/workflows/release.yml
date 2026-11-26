@@ -87,6 +87,9 @@ jobs:
           path: ./artifacts/
           retention-days: 90
 
+      - name: Push to NuGet feed
+        run: dotnet nuget push ./artifacts/nuget/*.nupkg --api-key "${{ secrets.NUGET_API_KEY }}" --source "${{ secrets.NUGET_FEED_URL }}" --skip-duplicate
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
