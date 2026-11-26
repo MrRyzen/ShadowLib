@@ -160,5 +160,110 @@ namespace ShadowLib.Tests
             for (int i = 0; i < 2000; i++) expected.NextSeed("n");
             Assert.AreEqual(expected.NextSeed("n"), orchestrator.NextSeed("n"));
         }
+
+        [Test]
+        public void SaveLoad_RestoresHeldStreamsInPlace()
+        {
+            var orchestrator = new Orchestrator(Root);
+            var loot = orchestrator.CreateRNG("loot");
+            Take(loot, 5);
+
+            byte[] save = orchestrator.Save();
+            var expected = Take(loot);
+            Take(loot, 100);
+            orchestrator.Load(save);
+
+            Assert.AreSame(loot, orchestrator.CreateRNG("loot"));
+            CollectionAssert.AreEqual(expected, Take(loot));
+        }
+
+        [Test]
+        public void Load_IntoOrchestratorWithDifferentRoot_FollowsTheSave()
+        {
+            var a = new Orchestrator(Root);
+            Take(a.CreateRNG("loot"), 3);
+            a.Next("chest");
+            a.Next("chest");
+            byte[] save = a.Save();
+
+            var b = new Orchestrator(999UL);
+            var held = b.CreateRNG("loot");
+            var stale = b.CreateRNG("not-in-save");
+            Take(stale, 4);
+            b.Next("chest");
+            b.Next("dropped-by-load");
+            b.Load(save);
+
+            Assert.AreEqual(Root, b.RootSeed);
+            CollectionAssert.AreEqual(Take(a.CreateRNG("loot")), Take(held));
+            CollectionAssert.AreEqual(Take(a.Next("chest")), Take(b.Next("chest")));
+            CollectionAssert.AreEqual(Take(new Orchestrator(Root).Next("dropped-by-load")), Take(b.Next("dropped-by-load")));
+            CollectionAssert.AreEqual(Take(a.Derive("chunk/1/1")), Take(b.Derive("chunk/1/1")));
+            CollectionAssert.AreEqual(Take(new Orchestrator(Root).CreateRNG("not-in-save")), Take(stale));
+        }
+
+        [Test]
+        public void Load_CreatesStreamsThatWereNotYetRequested()
+        {
+            var a = new Orchestrator(Root);
+            Take(a.CreateRNG("loot"), 7);
+
+            var b = new Orchestrator(Root);
+            b.Load(a.Save());
+
+            CollectionAssert.AreEqual(Take(a.CreateRNG("loot")), Take(b.CreateRNG("loot")));
+        }
+
+        [Test]
+        public void Save_IsIndependentOfCreationOrder()
+        {
+            var a = new Orchestrator(Root);
+            a.CreateRNG("a"); a.CreateRNG("b"); a.Next("x"); a.Next("y");
+
+            var b = new Orchestrator(Root);
+            b.Next("y"); b.CreateRNG("b"); b.Next("x"); b.CreateRNG("a");
+
+            CollectionAssert.AreEqual(a.Save(), b.Save());
+        }
+
+        [Test]
+        public void SaveLoad_RoundTripsNonAsciiAndEmptyContexts()
+        {
+            var a = new Orchestrator(Root);
+            Take(a.CreateRNG("战利品/ñ"), 2);
+            Take(a.CreateRNG(""), 2);
+            a.Next("宝箱");
+
+            var b = new Orchestrator(1UL);
+            b.Load(a.Save());
+
+            CollectionAssert.AreEqual(Take(a.CreateRNG("战利品/ñ")), Take(b.CreateRNG("战利品/ñ")));
+            CollectionAssert.AreEqual(Take(a.CreateRNG("")), Take(b.CreateRNG("")));
+            CollectionAssert.AreEqual(Take(a.Next("宝箱")), Take(b.Next("宝箱")));
+        }
+
+        [Test]
+        public void Load_RejectsBadData_AndLeavesStateUntouched()
+        {
+            var orchestrator = new Orchestrator(Root);
+            Take(orchestrator.CreateRNG("loot"), 3);
+            orchestrator.Next("chest");
+            byte[] good = orchestrator.Save();
+
+            byte[] wrongVersion = (byte[])good.Clone();
+            wrongVersion[0] = 99;
+            byte[] truncated = good.AsSpan(0, good.Length - 3).ToArray();
+            byte[] trailing = new byte[good.Length + 1];
+            good.CopyTo(trailing, 0);
+            byte[] shortState = (byte[])good.Clone();
+            shortState[18] = 15; // state length of "loot", after version, root, count and the name
+            byte[] negativeCount = (byte[])good.Clone();
+            negativeCount[12] = 0xFF; // top byte of the stream count
+
+            foreach (var bad in new[] { Array.Empty<byte>(), wrongVersion, truncated, trailing, shortState, negativeCount, new byte[] { 1, 2, 3 } })
+                Assert.Throws<System.IO.InvalidDataException>(() => orchestrator.Load(bad));
+
+            CollectionAssert.AreEqual(good, orchestrator.Save());
+        }
     }
 }

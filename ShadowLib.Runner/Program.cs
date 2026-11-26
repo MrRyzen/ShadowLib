@@ -62,6 +62,14 @@ namespace ShadowLib.Runner
             Console.WriteLine($"  Derive(\"chunk/3/4\") twice: {orchestrator.Derive("chunk/3/4").Range(0, 1000)}, {orchestrator.Derive("chunk/3/4").Range(0, 1000)} (same stream every call)");
             Console.WriteLine($"  Next(\"chest\") twice:      {orchestrator.Next("chest").Range(0, 1000)}, {orchestrator.Next("chest").Range(0, 1000)} (next in a replayable series)");
 
+            byte[] save = orchestrator.Save();
+            int[] beforeLoad = [rng.Range(0, 1000), rng.Range(0, 1000), rng.Range(0, 1000)];
+            orchestrator.Load(save);
+            int[] afterLoad = [rng.Range(0, 1000), rng.Range(0, 1000), rng.Range(0, 1000)];
+            Console.WriteLine($"\nSave/Load ({save.Length} bytes):");
+            Console.WriteLine($"  after save: {string.Join(", ", beforeLoad)}");
+            Console.WriteLine($"  after load: {string.Join(", ", afterLoad)} (match: {beforeLoad.SequenceEqual(afterLoad)})");
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);
