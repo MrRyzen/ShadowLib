@@ -71,12 +71,12 @@ New this session:
 
 ## Next Step
 
-Start `Polyomino.Generate` (roadmap item 11) with a short design conversation. What that conversation starts from:
+Start `Polyomino.Generate` and `Polycube.Generate` (roadmap item 11, plus its 3D counterpart) with a short design conversation. What that conversation starts from:
 
 - **Roadmap sketch:** `Polyomino.Generate(rng, cellCount: 12, compactness: 0.9f)`, growing from a seed cell and picking frontier cells weighted by neighbour count; high compactness gives blocky shapes, low gives sprawling ones. The sketch says it returns `List<(int Col, int Row)>`.
 - **First question for the user:** return a `Polyomino` instead of a list? `Grid2D`, `BinPacker` and `Polycube.FromPolyomino` all take a `Polyomino`, and `Polyomino.FromOffsets` already normalizes. Recommend `Polyomino`.
 - **Things to settle in the design:** exactly how `compactness` maps to frontier weights (pin it, because it fixes the output for a seed); how many `IRandom` draws per cell (keep it at one, like the weight table and `TryKillRandom`); what `cellCount <= 0` and out-of-range `compactness` do; a pinned-sequence test for one seed.
-- **Do not assume a 3D version is wanted.** `Polycube` exists now, but the user has not asked for `Polycube.Generate`. Ask, do not build.
+- **The user wants `Polycube.Generate` too** (said on 2026-11-26, after the backpack shipped). Design the 2D and 3D generators together so they share one growth rule: same `compactness` meaning, six face neighbours instead of four, one draw per cell. Not yet discussed: whether 3D needs per-axis control (for example a cap on depth so shapes stay flat-ish), which the design conversation should ask.
 - **Existing code to read first:** `Runtime/Spatial/Polyomino.cs` (no rotation, no duplicate check in `FromOffsets`), `Runtime/RNG/Distributions/DynamicWeightTable.cs` (a ready weighted picker, though a hand-rolled cumulative pick over the frontier avoids its `IEquatable` and allocation costs).
 
 After that, in roadmap order, each with its own short design pass:

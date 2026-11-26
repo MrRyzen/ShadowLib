@@ -71,7 +71,7 @@ Shortest path between two cells of a `Grid2D`, with caller-supplied walkability 
 
 ### Polyomino Generator
 
-Generate N-cell shapes with tunable compactness. Grows from a seed cell, picking frontier cells weighted by neighbor count.
+Generate N-cell shapes with tunable compactness. Grows from a seed cell, picking frontier cells weighted by neighbor count. A 3D counterpart, `Polycube.Generate`, follows the same growth rule over six face neighbours, for generated 3D items and pockets in `SpatialGraph3D`.
 
 ```csharp
 // Compact bias → rectangular shapes (military rig)
@@ -142,7 +142,7 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 8 | `IEffect<T>` + `EffectWheel<T,T>` | `DynamicWeightTable` | Low | **Done** |
 | 9 | `SpatialGraph3D` + `Polycube` (3D inventory that wears out, with pocket analysis) | `Polyomino` | Medium | **Done** |
 | 10 | A* pathfinding on `Grid2D` | `Grid2D` | Medium | Pending |
-| 11 | `Polyomino Generator` | `IRandom` | Low | Pending |
+| 11 | `Polyomino Generator` + `Polycube Generator` | `IRandom` | Low | Pending |
 | 12 | `Random Walk` | `IRandom` | Low | Pending |
 | 13 | `Spaced Placement` | — | Low | Pending |
 | 14 | `Cellular Automata` | `FieldGrid` | Medium | Pending |
