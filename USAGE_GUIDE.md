@@ -14,7 +14,7 @@ This document is the canonical reference for using ShadowLib. It is written for 
 | `ShadowLib.RNG.Distributions` | Weighted / tiered / dice / bag sampling. |
 | `ShadowLib.RNG.Noise` | Simplex noise for terrain, density fields, fBm-textured maps. |
 | `ShadowLib.RNG.Utilities.ScalingCurve` | Level-driven progression curves (XP, damage scaling, drop weights). |
-| `ShadowLib.Spatial` | 2D grids, scalar fields, polyomino shapes. |
+| `ShadowLib.Spatial` | 2D grids, scalar fields, polyomino shapes, and a 3D inventory box that wears out. |
 | `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation. |
 | `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc condition strings (`ConditionEvaluator`), e.g. to drive a table's influence from data. |
 
@@ -500,6 +500,46 @@ Span<float> row = density.GetRowMutable(5);   // mutable span over a single row
 
 Code your spatial algorithms against the interfaces, not `Grid2D`. Anything that operates on "a thing that holds polyomino-shaped occupants" — including `BinPacker` — lives at the `ISpace` level so future spatial backends drop in cleanly.
 
+### `SpatialGraph3D<TOccupant>` + `Polycube` — a 3D inventory that wears out
+
+A backpack with depth: a `width × height × layers` box where only the cells you add exist (the pockets), items are 3D shapes, and damage kills cells. For flat inventories use `Grid2D`.
+
+```csharp
+using ShadowLib.Spatial;
+
+var pack = new SpatialGraph3D<Item>(width: 6, height: 4, layers: 3);
+pack.AddPocket(Polycube.FromBox(4, 4, 3), x: 0, y: 0);            // main compartment
+pack.AddPocket(Polycube.FromBox(2, 2, 1), x: 4, y: 0);            // side pouch
+
+var crateShape = Polycube.FromBox(2, 2, 2);
+if (pack.CanPlace(0, 0, 0, crateShape))
+    pack.Place(0, 0, 0, ammoCrate, crateShape);                   // all cells or none
+
+// Damage: the library reports, your game decides.
+int dropChance = 25;
+if (pack.TryKillRandom(rng, out var dead) && dead.WasOccupied)
+{
+    if (rng.Range(0, 100) < dropChance) pack.Free(dead.Occupant); // item falls out
+    else dropChance += 25;                                        // it hangs on; try harder next time
+}
+
+pack.TryKill(1, 0, 0, out _);       // kill a specific cell
+pack.Repair(1, 0, 0);               // bring it back
+
+var pocketIds = new int[pack.Volume];
+int pockets = pack.FindPockets(pocketIds);   // which living cells still form one compartment
+```
+
+- **Shapes.** `Polycube.FromBox(w, h, d)`, `Polycube.FromOffsets((col, row, layer), ...)`, or `Polycube.FromPolyomino(flatShape, depth)` to extrude a 2D shape. Shapes do not rotate: build the rotated one (`FromBox(1, 1, 5)` instead of `FromBox(5, 1, 1)`).
+- **Killing a cell never moves or removes an item.** `TryKill` / `TryKillRandom` hand back a `KilledCell` (`X`, `Y`, `Layer`, `WasOccupied`, `Occupant`). The item stays on all its cells, dead one included, until you `Free` it. Check `WasOccupied` before reading `Occupant`.
+- **A dead cell rejects new placements.** An item you free from a damaged spot cannot go back there; it needs a spot where every cell is alive. `Repair` revives a cell; adding cells never does.
+- **`TryKillRandom` replays.** It makes exactly one `rng.Range(0, AliveCount)` call and none when nothing is alive, so the same seed damages the same cells.
+- **Pockets.** Living cells that touch face to face (not diagonally) are one pocket. `pocketIds` is indexed by `pack.GetIndex(x, y, layer)`; dead and missing cells get `-1`.
+- **An item is in the backpack once.** Placing it again throws; move it with `Free` then `Place`. Items are told apart by the comparer you pass to the constructor (default equality otherwise).
+- **Looking things up.** `Exists`, `IsAlive`, `IsOccupied`, `TryGetOccupant` and `CanPlace` return false outside the box instead of throwing. `GetCells(item, buffer)` lists where an item sits.
+- **Rebuilding a saved backpack:** add the cells, place the items, then kill the dead cells. No other order can recreate an item sitting on a dead cell.
+- **Limits.** Memory is proportional to `Volume` (the whole box), so this suits backpacks, not huge sparse spaces. It is not an `ISpace`, so `BinPacker` does not work on it, and it has no pathfinding or distance queries.
+
 ---
 
 ## Procedural
@@ -666,7 +706,8 @@ Read this section before generating ShadowLib code.
 3. **Need a 2D grid?**
    - With occupants and shapes → `Grid2D<TCell, TOccupant>`.
    - Just scalar values → `FieldGrid<T>`.
-4. **Need to place items in a grid?** → `BinPacker<TOccupant>` against any `ISpace<TOccupant>`.
+   - A 3D inventory whose cells can be destroyed → `SpatialGraph3D<TOccupant>` with `Polycube` shapes.
+4. **Need to place items in a grid?** → `BinPacker<TOccupant>` against any `ISpace<TOccupant>` (2D only).
 5. **Need a deterministic ID?** → `UUID.GenerateDeterministicUUID(seed, context)`.
 6. **Need a level-driven curve?** → `ScalingCurve.{Linear, Exponential, Logarithmic, Stepped}`.
 
@@ -688,7 +729,9 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `Xoshiro128` implementing `IRandom` — it does not; it is a plain struct. The `IRandom` implementation is `Xoshiro128StarStar`.
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate(rng, cellCount, compactness)` — listed in the roadmap as **pending**, not yet implemented.
-- `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, `SparseGraph<T>.FindPath`, `SparseGraph<T>.GetNodesInRange` — all roadmap-only. Do not write code that calls these.
+- `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, A* / pathfinding on `Grid2D` — all roadmap-only. Do not write code that calls these.
+- `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
+- `Polycube` / `Polyomino` rotation helpers, and `SpatialGraph3D` implementing `ISpace` or working with `BinPacker` — none of these exist.
 - `DynamicWeightTable<T>.AddWeight` / `MultiplyWeight` / `ResetWeights` / `UniformWeights` / `NormalizeWeights` / `GetBaseWeight` / `SetBaseWeight` — removed. Use `SetInfluence` for odds that change with game state, `SetEnabled(item, false)` to take an item out, `SetWeight` for a permanent change.
 - `WeightModifier<T>`, `ModifierOperation`, `ModifierLoader`, the `ShadowLib.RNG.Modifiers` namespace — removed. `ConditionEvaluator` still exists.
 - An influence provider interface (`IProbabilityInfluenceProvider` or similar) — there is none; `SetInfluence` takes a `Func<float>`.

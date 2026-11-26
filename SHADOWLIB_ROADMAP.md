@@ -51,6 +51,9 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 - **`FieldGrid<T>`** — Lightweight struct-value grid for scalar fields (density maps, heatmaps, influence grids). Ref access, mutable row spans, bulk fill/copy/snapshot.
 - **`Polyomino`** — Immutable shape struct from rect or explicit offsets, normalized to (0,0) anchor. Bounding box metadata.
 
+- **`Polycube`** — Immutable 3D shape struct from a box, explicit offsets, or an extruded `Polyomino`. Normalized to a (0,0,0) anchor.
+- **`SpatialGraph3D<TOccupant>`** — 3D inventory box that wears out (a Tarkov-style backpack with depth). Pockets of cells, all-or-nothing `Polycube` item placement, cells that die and can be repaired (`TryKill`, seeded `TryKillRandom`, `Repair`), and `FindPockets` for which living cells still form one compartment. Killing a cell reports what was on it and leaves the item in place.
+
 **Future consideration:** `CanOccupyCell(x, y, w, h)` region check is O(w\*h). For large grids + large entity footprints (RTS base placement, 1000x1000 influence maps), consider adding an occupancy bitmask or 2D prefix-sum occupancy map for O(1) rect queries.
 
 ### Procedural
@@ -62,21 +65,9 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 
 ## Not Yet Implemented
 
-### SparseGraph\<T\>
+### A* pathfinding on Grid2D
 
-Coordinate-keyed node graph. `Dictionary<(int,int), T>` backed with bidirectional edges, BFS, A*, range queries, connected component analysis.
-
-```csharp
-var graph = new SparseGraph<CellData>();
-var a = graph.AddNode(0, 0, new CellData());
-var b = graph.AddNode(1, 0, new CellData());
-graph.Connect(a, b);
-
-List<Node<CellData>> path = graph.FindPath(a, target);
-List<Node<CellData>> inRange = graph.GetNodesInRange(a, steps: 3);
-int dist = graph.Distance(a, target);
-List<List<Node<CellData>>> pockets = graph.FindConnectedComponents();
-```
+Shortest path between two cells of a `Grid2D`, with caller-supplied walkability and step cost. No API designed yet. (Pathfinding was deliberately left out of `SpatialGraph3D`.)
 
 ### Polyomino Generator
 
@@ -111,10 +102,10 @@ Place N items on a set of candidate positions with minimum distance constraints.
 
 ```csharp
 var positions = SpacedPlacement.Place(rng,
-    candidates: allNodes,
+    candidates: roomCentres,
     count: 3,
     minDistance: 2,
-    distanceFunc: (a, b) => graph.Distance(a, b));
+    distanceFunc: (a, b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y));
 ```
 
 ### Cellular Automata
@@ -149,8 +140,8 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 6 | `BinPacker<T>` | `ISpace`, `Polyomino` | Medium | **Done** |
 | 7 | `SimplexNoise` | `IRandom` | Medium | **Done** |
 | 8 | `IEffect<T>` + `EffectWheel<T,T>` | `DynamicWeightTable` | Low | **Done** |
-| 9 | `SparseGraph<T>` | — | Medium | Pending |
-| 10 | Connected Component Analysis | `SparseGraph` | Low | Pending |
+| 9 | `SpatialGraph3D` + `Polycube` (3D inventory that wears out, with pocket analysis) | `Polyomino` | Medium | **Done** |
+| 10 | A* pathfinding on `Grid2D` | `Grid2D` | Medium | Pending |
 | 11 | `Polyomino Generator` | `IRandom` | Low | Pending |
 | 12 | `Random Walk` | `IRandom` | Low | Pending |
 | 13 | `Spaced Placement` | — | Low | Pending |

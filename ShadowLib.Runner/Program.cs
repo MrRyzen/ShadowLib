@@ -107,6 +107,34 @@ namespace ShadowLib.Runner
             bool second = shop.TrySample(wheelRng, out _);
             Console.WriteLine($"  stocked item: first pick {first} ({relic}), second pick {second} (sold out)");
 
+            var pack = new SpatialGraph3D<string>(width: 6, height: 4, layers: 3);
+            pack.AddPocket(Polycube.FromBox(4, 4, 3), 0, 0, 0);
+            pack.AddPocket(Polycube.FromBox(2, 2, 1), 4, 0, 0);
+            pack.Place(0, 0, 0, "Ammo Crate", Polycube.FromBox(2, 2, 2));
+            pack.Place(2, 0, 0, "Rifle", Polycube.FromBox(1, 4, 1));
+            string[] carried = ["Ammo Crate", "Rifle"];
+            var pocketIds = new int[pack.Volume];
+            Console.WriteLine($"\n3D backpack: {pack.AliveCount} living cells in {pack.FindPockets(pocketIds)} pocket(s), holding {string.Join(" and ", carried)}");
+
+            var packRng = orchestrator.CreateRNG("backpack");
+            int dropChance = 25;
+            for (int hit = 1; hit <= 12 && pack.TryKillRandom(packRng, out var dead); hit++)
+            {
+                string outcome = "it was empty";
+                if (dead.WasOccupied && packRng.Range(0, 100) < dropChance)
+                {
+                    pack.Free(dead.Occupant);
+                    outcome = $"{dead.Occupant} falls out";
+                }
+                else if (dead.WasOccupied)
+                {
+                    dropChance += 25;
+                    outcome = $"{dead.Occupant} hangs on (drop chance now {dropChance}%)";
+                }
+                Console.WriteLine($"  hit {hit}: cell ({dead.X}, {dead.Y}, {dead.Layer}) dies, {outcome}");
+            }
+            Console.WriteLine($"  after damage: {pack.AliveCount} living cells in {pack.FindPockets(pocketIds)} pocket(s), still holding {string.Join(" and ", carried.Where(pack.Contains).DefaultIfEmpty("nothing"))}");
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);

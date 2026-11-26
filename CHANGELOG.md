@@ -21,11 +21,15 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - `DynamicWeightTable<T>.SampleDistinct(rng, Span<T>)`: several different items in one call.
 - `DynamicWeightTable<T>.TrySample` and `GetProbability`.
 - `IEffect<TTarget>` and `EffectWheel<TEffect, TTarget>` with `SampleAndApply(rng, target)`.
+- `Polycube`: a 3D shape (`FromBox`, `FromOffsets`, `FromPolyomino`), the counterpart of `Polyomino`.
+- `SpatialGraph3D<TOccupant>` is now a complete 3D inventory that wears out: `Polycube` items placed across layers, `TryKill` / `TryKillRandom(rng)` returning a `KilledCell<TOccupant>` and leaving the item in place, `Repair`, `FindPockets`, plus `Exists`, `IsAlive`, `IsOccupied`, `TryGetOccupant`, `Contains`, `GetCells`, `Volume`, `ExistingCount`, `AliveCount` and an optional occupant comparer.
 
 ### Removed
 
 - **Breaking:** `DynamicWeightTable<T>.AddWeight`, `MultiplyWeight`, `ResetWeights`, `UniformWeights`, `NormalizeWeights`, `GetBaseWeight`, `TryGetBaseWeight` and `SetBaseWeight`, along with the base/dynamic weight split. For odds that change with game state use `SetInfluence`; to take an item out use `SetEnabled(item, false)` or `TryRemove`; for a permanent change use `SetWeight`.
 - **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` (namespace `ShadowLib.RNG.Modifiers`). Nothing in the library applied them. `ConditionEvaluator` stays and can drive an influence source. The library no longer uses `System.Text.Json`.
+- **Breaking:** `SparseGraph<TOccupant>`. It was untested scaffolding with no users; `SpatialGraph3D` no longer sits on top of it.
+- **Breaking:** from `SpatialGraph3D<TOccupant>`: the `Graph` property, `AddNode` (now `AddCell`), `NodeExists` (now `Exists`), `ConnectAdjacent` and `ConnectLayers` (touching cells are always neighbours), the `initialCapacity` constructor parameter, and the `Polyomino` overloads of `AddPocket` / `CanPlace` / `Place` (pass `Polycube.FromPolyomino(shape)`). `AddPocket` now throws when the shape leaves the box instead of clipping it, and `Free` returns whether the item was placed.
 - **Breaking:** static `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(context)`. Replace with `var orchestrator = new Orchestrator(seed);` and `orchestrator.CreateRNG(context)`. Streams from `CreateRNG` are unchanged for the same root seed and context.
 - **Breaking:** the implicit OS-entropy root seed. `Orchestrator` now always needs an explicit seed; pass `Seeding.GenerateSeed64()` for a non-repeatable run.
 - **Breaking:** `XorShift128`. It never implemented `IRandom`; use `Xoshiro128StarStar` or `Xoshiro128`.

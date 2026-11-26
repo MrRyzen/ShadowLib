@@ -69,7 +69,12 @@ Two grid types serve different purposes — don't conflate them:
 
 `CanOccupyCell` rect checks are O(w·h); for very large grids + footprints, consider an occupancy bitmask before adding more spatial features (roadmap item).
 
-`SparseGraph.cs` and `SpatialGraph3D.cs` exist on disk but the roadmap lists `SparseGraph<T>` as **not yet implemented** — treat them as scaffolding, not stable API. In particular, `GetNodesInRange`, `FindPath`, and connected-component analysis are roadmap-only; do not write code that calls them.
+`SpatialGraph3D<TOccupant>` is the 3D inventory box that wears out (a backpack with depth); 2D inventories stay on `Grid2D`. Items are `Polycube` shapes (the 3D counterpart of `Polyomino`). Things to keep true:
+- Storage is dense arrays sized to the box, indexed by `GetIndex`; every coordinate is bounds-checked per axis before it becomes an index, so shapes and neighbours never wrap around an edge.
+- Killing a cell (`TryKill`, `TryKillRandom`) never moves or removes an item; it returns a `KilledCell` and the game decides. Dead cells reject new placements; `Repair` revives them.
+- `TryKillRandom` makes exactly one `rng.Range(0, AliveCount)` call and picks by rank in ascending index order, so damage replays from the seed.
+- `FindPockets` uses six-neighbour adjacency computed from coordinates; nothing stores connections.
+- It is not an `ISpace`, `BinPacker` does not work on it, and it has no pathfinding, distance or range queries by design. There is no `SparseGraph`.
 
 ### `ShadowLib.Procedural` — generation algorithms over `ISpace`
 
