@@ -61,6 +61,7 @@ namespace ShadowLib.Spatial
         private readonly CellState[] _states;
         private readonly TOccupant[] _occupants;
         private readonly Dictionary<TOccupant, int[]> _cellsByOccupant;
+        private int[]? _floodStack;
 
         /// <summary>Creates an empty box. No cells exist until <see cref="AddCell"/> or <see cref="AddPocket"/>.</summary>
         /// <param name="width">Columns. Must be greater than zero.</param>
@@ -325,6 +326,69 @@ namespace ShadowLib.Spatial
             _states[GetIndex(x, y, layer)] |= CellState.Alive;
             AliveCount++;
             return true;
+        }
+
+        /// <summary>
+        /// Groups living cells into pockets: cells are in the same pocket when connected through living cells
+        /// that touch face to face (±x, ±y, ±layer). Items on the cells make no difference.
+        /// </summary>
+        /// <param name="pocketIds">
+        /// Indexed by <see cref="GetIndex"/>; needs at least <see cref="Volume"/> entries, and only those are written.
+        /// A living cell gets its pocket number, counted from 0 in order of each pocket's lowest index.
+        /// Dead and missing cells get -1.
+        /// </param>
+        /// <returns>The number of pockets.</returns>
+        /// <exception cref="ArgumentException">The buffer is shorter than <see cref="Volume"/>.</exception>
+        public int FindPockets(Span<int> pocketIds)
+        {
+            if (pocketIds.Length < Volume)
+                throw new ArgumentException($"The buffer needs at least {Volume} entries.", nameof(pocketIds));
+
+            pocketIds = pocketIds.Slice(0, Volume);
+            pocketIds.Fill(-1);
+            _floodStack ??= new int[Volume];
+
+            int pockets = 0;
+            for (int start = 0; start < Volume; start++)
+            {
+                if (!IsUnassignedLivingCell(start, pocketIds))
+                    continue;
+
+                int depth = 0;
+                pocketIds[start] = pockets;
+                _floodStack[depth++] = start;
+                while (depth > 0)
+                {
+                    var (x, y, layer) = GetPosition(_floodStack[--depth]);
+                    depth = Visit(x - 1, y, layer, pockets, pocketIds, depth);
+                    depth = Visit(x + 1, y, layer, pockets, pocketIds, depth);
+                    depth = Visit(x, y - 1, layer, pockets, pocketIds, depth);
+                    depth = Visit(x, y + 1, layer, pockets, pocketIds, depth);
+                    depth = Visit(x, y, layer - 1, pockets, pocketIds, depth);
+                    depth = Visit(x, y, layer + 1, pockets, pocketIds, depth);
+                }
+                pockets++;
+            }
+            return pockets;
+        }
+
+        private int Visit(int x, int y, int layer, int pocket, Span<int> pocketIds, int depth)
+        {
+            if (!IsValidPosition(x, y, layer))
+                return depth;
+
+            int index = GetIndex(x, y, layer);
+            if (!IsUnassignedLivingCell(index, pocketIds))
+                return depth;
+
+            pocketIds[index] = pocket;
+            _floodStack![depth] = index;
+            return depth + 1;
+        }
+
+        private bool IsUnassignedLivingCell(int index, Span<int> pocketIds)
+        {
+            return (_states[index] & CellState.Alive) != 0 && pocketIds[index] == -1;
         }
 
         private KilledCell<TOccupant> KillAt(int index)

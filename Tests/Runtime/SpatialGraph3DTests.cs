@@ -312,5 +312,76 @@ namespace ShadowLib.Tests
             Assert.IsTrue(pack.IsOccupied(1, 0, 0));
             Assert.IsFalse(pack.IsAlive(1, 0, 0));
         }
+
+        [Test]
+        public void FindPockets_OnePocket()
+        {
+            var pack = FullPack();
+            var ids = new int[24];
+            Assert.AreEqual(1, pack.FindPockets(ids));
+            CollectionAssert.AreEqual(new int[24], ids);
+        }
+
+        [Test]
+        public void FindPockets_SeparatePockets_AndSplitByADeadCell()
+        {
+            var apart = new SpatialGraph3D<string>(5, 1, 1);
+            apart.AddPocket(Polycube.FromBox(2, 1, 1), 0, 0, 0);
+            apart.AddPocket(Polycube.FromBox(2, 1, 1), 3, 0, 0);
+            var ids = new int[5];
+            Assert.AreEqual(2, apart.FindPockets(ids));
+            CollectionAssert.AreEqual(new[] { 0, 0, -1, 1, 1 }, ids);
+
+            var split = new SpatialGraph3D<string>(5, 1, 1);
+            split.AddPocket(Polycube.FromBox(5, 1, 1), 0, 0, 0);
+            Assert.AreEqual(1, split.FindPockets(ids));
+            split.TryKill(2, 0, 0, out _);
+            Assert.AreEqual(2, split.FindPockets(ids));
+            CollectionAssert.AreEqual(new[] { 0, 0, -1, 1, 1 }, ids);
+            split.Repair(2, 0, 0);
+            Assert.AreEqual(1, split.FindPockets(ids));
+        }
+
+        [Test]
+        public void FindPockets_ConnectsThroughLayers_ButNotDiagonalsOrWrappedEdges()
+        {
+            var stacked = new SpatialGraph3D<string>(1, 1, 2);
+            stacked.AddPocket(Polycube.FromBox(1, 1, 2), 0, 0, 0);
+            Assert.AreEqual(1, stacked.FindPockets(new int[2]));
+
+            var rowWrap = new SpatialGraph3D<string>(2, 2, 1);
+            rowWrap.AddCell(1, 0, 0);
+            rowWrap.AddCell(0, 1, 0);
+            var ids = new int[4];
+            Assert.AreEqual(2, rowWrap.FindPockets(ids));
+            CollectionAssert.AreEqual(new[] { -1, 0, 1, -1 }, ids);
+
+            var layerWrap = new SpatialGraph3D<string>(2, 1, 2);
+            layerWrap.AddCell(1, 0, 0);
+            layerWrap.AddCell(0, 0, 1);
+            Assert.AreEqual(2, layerWrap.FindPockets(ids));
+        }
+
+        [Test]
+        public void FindPockets_BufferRules_OccupancyAndAllocation()
+        {
+            var pack = FullPack();
+            pack.Place(0, 0, 0, "crate", Crate);
+            Assert.Throws<ArgumentException>(() => pack.FindPockets(new int[23]));
+
+            var ids = new int[26];
+            ids[24] = 99;
+            ids[25] = 99;
+            Assert.AreEqual(1, pack.FindPockets(ids));
+            Assert.AreEqual(0, ids[0]);
+            Assert.AreEqual((99, 99), (ids[24], ids[25]));
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 100; i++) pack.FindPockets(ids);
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            Assert.AreEqual(0, allocated);
+
+            Assert.AreEqual(0, new SpatialGraph3D<string>(2, 2, 2).FindPockets(new int[8]));
+        }
     }
 }
