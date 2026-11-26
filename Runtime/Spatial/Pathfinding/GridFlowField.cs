@@ -49,8 +49,12 @@ namespace ShadowLib.Spatial.Pathfinding
 
             distances = distances.Slice(0, cellCount);
             directions = directions.Slice(0, cellCount);
-            distances.Fill(int.MaxValue);
-            directions.Fill(NoDirection);
+            // a loop, not Span.Fill: Burst 1.8.25 compiles Span<byte>.Fill to writes four bytes wide
+            for (int i = 0; i < cellCount; i++)
+            {
+                distances[i] = int.MaxValue;
+                directions[i] = NoDirection;
+            }
 
             var positions = scratch.Slice(0, cellCount);
             var heap = scratch.Slice(cellCount, cellCount);

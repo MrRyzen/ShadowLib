@@ -77,7 +77,7 @@ Two grid types serve different purposes — don't conflate them:
 - It is not an `ISpace`, `BinPacker` does not work on it, and it has no pathfinding, distance or range queries by design. There is no `SparseGraph`.
 
 `ShadowLib.Spatial.Pathfinding` holds the grid searches. `GridAStar`, `GridJumpPointSearch` and `GridFlowField` are static functions over a `ReadOnlySpan<byte>` cost map (0 = blocked, otherwise the cost of entering) and caller-owned `Span<int>` scratch, so they run unchanged inside Burst jobs; `GridPathfinder` is the managed wrapper for `Grid2D`. Things to keep true:
-- The core (`GridPathing`, `PathScratch`, `PathHeap` and the three searches) uses no floats, managed objects, delegates, tuples or `unsafe`, and its exceptions take constant strings only. Anything else breaks Burst.
+- The core (`GridPathing`, `PathScratch`, `PathHeap` and the three searches) uses no floats, managed objects, delegates, tuples or `unsafe`, and its exceptions take constant strings only. Anything else breaks Burst. Do not use `Span.Fill`, `Span.Clear` or `Span.CopyTo` there either: under Burst 1.8.25 `Span<byte>.Fill` wrote four bytes per element and corrupted neighbouring memory (caught by `PathfindingBurstTests.FlowField_UnderBurst_MatchesManaged`, 2026-11-26). Use plain loops.
 - Costs are integers: 10 per orthogonal step and 14 per diagonal, times the cost of the cell entered. A diagonal needs both cells it passes between to be walkable, in all three searches.
 - Nothing is cleared per query: the A* / JPS scratch carries a generation counter, the map size and an algorithm id in its first three ints.
 - `GridJumpPointSearchTests.RandomMaps_StatusAndCostMatchAStarOnTheUniformMap` is the guard on the JPS pruning rules; never weaken it to make a change pass.

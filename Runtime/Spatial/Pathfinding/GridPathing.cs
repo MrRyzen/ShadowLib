@@ -114,7 +114,8 @@ namespace ShadowLib.Spatial.Pathfinding
 
             if (scratch[1] != cellCount || scratch[2] != algorithmId || scratch[0] == int.MaxValue)
             {
-                scratch.Slice(0, HeaderLength + cellCount).Clear();
+                for (int i = 0; i < HeaderLength + cellCount; i++)
+                    scratch[i] = 0;
                 scratch[1] = cellCount;
                 scratch[2] = algorithmId;
             }

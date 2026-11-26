@@ -34,6 +34,13 @@ Movement is four-way by default, eight-way behind a flag.
 - A per-query clear of buffers proportional to map size.
 - `unsafe` code. The asmdef has `allowUnsafeCode: false` and stays that way.
 
+## Found during the build
+
+- **`Span<byte>.Fill` is miscompiled by Burst 1.8.25** (four bytes written per element, overrunning the buffer). The core uses plain loops instead of `Fill` / `Clear` / `CopyTo`. Managed .NET never showed it; only the Unity Burst test did.
+- **JPS is not faster everywhere.** Measured on 512x512, eight-way, plain .NET: rooms with doors A* 1.8 ms vs JPS 0.09 ms; caves 0.68 vs 0.24; noise 30 % 2.9 vs 1.8; fully open 0.05 vs 0.39. A* with its tie-break walks almost straight across open ground, while JPS scans whole rows and columns. The docs say when to use which.
+- The scratch header grew to three ints (generation, cell count, algorithm id) so a scratch reused on another map size or by the other search clears itself instead of returning stale data.
+- `GridFlowField` gained `StepX` / `StepY` to decode a direction, and its scratch needs no header because every build rewrites every output cell.
+
 ## Constraints
 
 - `netstandard2.1`, no `UnityEngine`, no NuGet references.
