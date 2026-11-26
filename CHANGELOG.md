@@ -11,7 +11,7 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - `Orchestrator.DeriveSeed(context)` / `NextSeed(context)`: the seeds behind `Derive` / `Next`, for passing into jobs.
 - `Orchestrator.Save()` / `Load(ReadOnlySpan<byte>)`: a versioned `byte[]` holding the root seed, every long-lived stream's state and every `Next` series position. `Load` restores streams in place and throws `InvalidDataException` on bad input without changing anything.
 - `Orchestrator.Fork(context)` for an independent child orchestrator, and `Orchestrator.RootSeed`.
-- `Xoshiro128`: the xoshiro128** generator as an unmanaged struct for Unity jobs, Burst and ECS. Same output as `Xoshiro128StarStar` for the same seed.
+- `Xoshiro128`: the xoshiro128** generator as an unmanaged struct for Unity jobs, Burst and ECS. Same output as `Xoshiro128StarStar` for the same seed, verified under Burst 2.0.0 in the default and `Deterministic` float modes (`FloatMode.Fast` changes the low bits of the float and double `Range` overloads only).
 - `Seeding.DeriveSeed64(ulong rootSeed, ulong index)`: arithmetic-only seed derivation, usable inside jobs.
 - `Orchestrator`'s stream and seed members are thread-safe. Generators remain single-threaded, and `Save` / `Load` must not overlap with draws from a `CreateRNG` stream on another thread.
 

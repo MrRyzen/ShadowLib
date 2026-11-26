@@ -11,7 +11,7 @@ namespace ShadowLib.RNG
     /// Own one instance per run, world or save slot; instances share nothing.
     /// </summary>
     /// <remarks>
-    /// Three kinds of stream, which never collide even for the same context name:
+    /// Three kinds of stream, which are unrelated to each other even for the same context name:
     /// <list type="bullet">
     /// <item><description><see cref="CreateRNG"/>: long-lived, cached, continues where it left off.</description></item>
     /// <item><description><see cref="Derive"/>: throwaway, the same stream on every call for a context.</description></item>
@@ -119,7 +119,7 @@ namespace ShadowLib.RNG
 
         /// <summary>
         /// Captures everything needed to resume this orchestrator: the root seed, the state of every long-lived
-        /// stream and the position of every <see cref="Next"/> series. Equal state always yields equal bytes.
+        /// stream and the position of every <see cref="Next"/> series. The same calls in any order yield the same bytes.
         /// Store the result however you like; restore it with <see cref="Load"/>.
         /// Not safe to call while another thread is drawing from a <see cref="CreateRNG"/> stream.
         /// </summary>

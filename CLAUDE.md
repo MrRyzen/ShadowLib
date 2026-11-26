@@ -18,8 +18,6 @@ The repo doubles as:
 ## Commands
 
 ```bash
-dotnet build  ShadowLib.sln                              # build everything
-dotnet build  Runtime/ShadowLib.csproj                   # library only (faster)
 dotnet test   ShadowLib.sln -c Release                   # run NUnit tests
 dotnet test   Tests/Runtime/ShadowLib.Tests.csproj --filter "FullyQualifiedName~OrchestratorTests"
 dotnet run    --project ShadowLib.Runner                 # console smoke run
@@ -31,26 +29,6 @@ The library targets `netstandard2.1`; the runner targets `net9.0`; tests target 
 
 CI lives at `.github/workflows/ci.yml` (push/PR) and `.github/workflows/release.yml` (tag-driven). Releases trigger on tags matching `v*.*.*` or `v*.*.*-*`. The release workflow validates that `package.json` `version` and `Runtime/ShadowLib.csproj` `<Version>` agree with the tag — bump them together.
 
-## Layout
-
-```
-.
-├── package.json                  Unity UPM manifest (version must match csproj <Version>)
-├── Runtime/                      UPM Runtime/ + .NET csproj source
-│   ├── ShadowLib.asmdef          Main asmdef: noEngineReferences=true, no external deps
-│   ├── ShadowLib.csproj
-│   ├── RNG/  Spatial/  Procedural/
-│   └── Optional/                 Opt-in features
-│       ├── ShadowLib.Optional.asmdef    defineConstraints: ["SHADOWLIB_NCALC"]
-│       ├── ConditionEvaluator.cs        depends on NCalc
-│       └── ModifierLoader.cs            depends on System.Text.Json
-├── Tests/Runtime/                NUnit tests + ShadowLib.Tests.asmdef
-├── Samples~/BasicUsage/          Unity-importable sample (the ~ keeps it dormant until imported)
-├── ShadowLib.Runner/             Plain .NET console demo (NOT part of UPM package — excluded by .npmignore)
-├── .github/workflows/            ci.yml + release.yml
-└── .npmignore                    Controls what `npm pack` ships in the UPM tarball
-```
-
 ## Architecture
 
 Three namespaces under `ShadowLib`, each a separately-usable layer.
@@ -60,24 +38,18 @@ Three namespaces under `ShadowLib`, each a separately-usable layer.
 The non-obvious shape here is the **Orchestrator → context-derived substreams** pattern:
 
 ```
-root seed (ulong)
+new Orchestrator(rootSeed)
    │
-   ├── Orchestrator.CreateRNG("loot")       ── Xoshiro128StarStar #1
-   ├── Orchestrator.CreateRNG("worldgen")   ── Xoshiro128StarStar #2
-   └── Orchestrator.CreateRNG("ai")         ── Xoshiro128StarStar #3
+   ├── CreateRNG("loot")      ── long-lived, cached, same instance per context
+   ├── Derive("chunk/3/4")    ── throwaway, identical stream on every call, nothing stored
+   └── Next("chest")          ── throwaway, next stream in a per-context series (one counter stored)
 ```
 
-`Orchestrator.CreateRNG(string context)` derives a per-context seed via `Seeding.DeriveSeed64` (FNV-1a over UTF-16 chars + SplitMix64 finalizer). Same root + same context = identical stream forever. **Don't** instantiate `Xoshiro128StarStar` directly in feature code — go through `Orchestrator` so streams stay reproducible and decoupled across systems.
+`Orchestrator` is an **instance** owned by the caller (one per world / save slot), not a static. `CreateRNG` derives its seed via `Seeding.DeriveSeed64(root, context)` (FNV-1a over UTF-16 chars + SplitMix64 finalizer); `Derive`, `Next` and `Fork` XOR a per-kind domain constant into the root first so the kinds never collide. Same root + same calls = identical streams forever. **Don't** hand-seed `Xoshiro128StarStar` in feature code — use `Derive`/`Next` so throwaways replay with the root seed.
 
-`Orchestrator` is `static` and process-global. `Initialize(seed)` clears all cached RNGs — call once at boot, not per-scene-load.
+`Save()` returns a versioned `byte[]` (root seed, long-lived stream states, `Next` counters, sorted by context); `Load` restores streams in place and throws `InvalidDataException` without mutating on bad input. All orchestrator members take one lock; generators themselves are single-threaded. `Next` is call-order dependent, so it only replays when called from one thread.
 
-`IRandom` (in `Runtime/RNG/Sources/`) is the contract. **`Xoshiro128StarStar` implements it; `XorShift128` is legacy and does not** — it's missing `GetState`/`SetState`/`Seed`/`NextUInt`/`NextULong`/`Range(ulong,ulong)`. Don't pass a `XorShift128` where an `IRandom` is expected.
-
-Sub-areas:
-- `Distributions/` — `DynamicWeightTable<T>` (mutable, base+dynamic weights), `AliasTable<T>` (immutable, O(1)), `TieredTable<T>` (rarity-gated), `RandomBag<T>`, `Dice<T>`.
-- `Modifiers/` — `WeightModifier<T>` (the struct + enum, no external deps; lives in main asmdef).
-- `Noise/` — `SimplexNoise` (2D/3D + fBm `Fractal()`), seeded from any `IRandom`.
-- `Utilities/` — `Seeding`, `UUID` (`GenerateRandomUUID()` for v4, `GenerateDeterministicUUID(ulong seed, ulong context)` for v5 with a ShadowLib namespace UUID), `ScalingCurve` (zero-alloc struct), `RandomUtils` (`Shuffle`, `RandomSelect`, `Chance`).
+`IRandom` (in `Runtime/RNG/Sources/`) is the contract, implemented by the `Xoshiro128StarStar` class. That class is a thin wrapper over the unmanaged `Xoshiro128` struct in the same file, which is the form to use in Unity jobs / Burst (seeded via `DeriveSeed`/`NextSeed` + `Seeding.DeriveSeed64(ulong, ulong)`). Keep the struct free of references and keep both bit-identical; `dotnet test` cannot run the Burst compiler; the Burst check is `Assets/_project/Tests/ShadowLibBurst/` in `L:\Projects\games\ShadowLab` (EditMode tests, run through the `unity` CLI against the open editor, package installed from the `npm pack` tarball). Re-run it after touching `Xoshiro128` or `Seeding.DeriveSeed64(ulong, ulong)`.
 
 The NCalc / JSON-dependent code lives in `Runtime/Optional/`, gated by the `SHADOWLIB_NCALC` define for Unity. The .NET csproj compiles it unconditionally because NCalc + System.Text.Json are NuGet refs that always resolve.
 
@@ -99,7 +71,7 @@ Two grid types serve different purposes — don't conflate them:
 
 ### `ShadowLib.Procedural` — generation algorithms over `ISpace`
 
-Currently just `BinPacker<TOccupant>`: polyomino bin packing on any `ISpace`. Strategies are `FirstFit`, `BestFit` (neighbor-contact scoring), `BottomLeft`, plus `AutoSort` which repacks by decreasing footprint. Anything new in this namespace should consume `ISpace` / `IRandom`, not concrete types.
+Anything new in this namespace should consume `ISpace` / `IRandom`, not concrete types.
 
 ## Working in this repo
 
@@ -110,7 +82,6 @@ Currently just `BinPacker<TOccupant>`: polyomino bin packing on any `ISpace`. St
 - The library must keep building for `netstandard2.1`. `Random.Shared`, generic math, `static abstract` interface members, and `DateOnly` are all unavailable.
 - **Add a test for any new public surface** in `Tests/Runtime/`. Tests are deterministic — seed via `Seeding.GenerateSeed64("test-name")` or pass `new Xoshiro128StarStar(123UL)` directly.
 - `Program.cs` in `ShadowLib.Runner/` doubles as living documentation — it shows the canonical wiring of `Seeding` → `Orchestrator` → `TieredTable` → `Grid2D` → `BinPacker`. When you add a new public surface, extend the runner so a `dotnet run` still demonstrates it end-to-end.
-- **Version is duplicated** in `package.json` and `Runtime/ShadowLib.csproj` `<Version>`. The release workflow fails fast if they disagree with the git tag — bump them together.
 
 ## Files Claude should treat as authoritative
 

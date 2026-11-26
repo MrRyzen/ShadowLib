@@ -33,3 +33,7 @@ Thumbs.db
 *.tgz
 artifacts/
 TestResults/
+
+# Local tooling
+.claude/
+scripts/
