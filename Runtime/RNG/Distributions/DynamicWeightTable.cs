@@ -31,6 +31,13 @@ namespace ShadowLib.RNG.Distributions
 
         private readonly List<Entry> _entries;
         private float[] _effective = Array.Empty<float>();
+        private int _lastPicked = -1;
+
+        /// <summary>
+        /// Gets or sets whether the last picked item is kept out of the next pick.
+        /// It stays pickable when it is the only pickable item.
+        /// </summary>
+        public bool PreventRepeat { get; set; }
 
         /// <summary>Initializes an empty table.</summary>
         /// <param name="initialCapacity">Initial capacity of the item list.</param>
@@ -67,6 +74,8 @@ namespace ShadowLib.RNG.Distributions
             if (index < 0) return false;
 
             _entries.RemoveAt(index);
+            if (index == _lastPicked) _lastPicked = -1;
+            else if (index < _lastPicked) _lastPicked--;
             return true;
         }
 
@@ -74,6 +83,32 @@ namespace ShadowLib.RNG.Distributions
         public void Clear()
         {
             _entries.Clear();
+            _lastPicked = -1;
+        }
+
+        /// <summary>Gets the most recently picked item. Tracked whether or not <see cref="PreventRepeat"/> is on.</summary>
+        /// <returns>False if nothing has been picked, or the last pick was removed or cleared.</returns>
+        public bool TryGetLastPicked(out T item)
+        {
+            item = _lastPicked >= 0 ? _entries[_lastPicked].Item : default!;
+            return _lastPicked >= 0;
+        }
+
+        /// <summary>Sets the last picked item, for restoring saved state.</summary>
+        /// <returns>True if the item was found.</returns>
+        public bool SetLastPicked(T item)
+        {
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            _lastPicked = index;
+            return true;
+        }
+
+        /// <summary>Forgets the last picked item.</summary>
+        public void ClearLastPicked()
+        {
+            _lastPicked = -1;
         }
 
         /// <summary>Returns whether the table contains the item.</summary>
@@ -304,6 +339,7 @@ namespace ShadowLib.RNG.Distributions
 
         private void CommitPick(int index)
         {
+            _lastPicked = index;
             Entry entry = _entries[index];
             if (!entry.HasStock) return;
 
@@ -316,13 +352,30 @@ namespace ShadowLib.RNG.Distributions
             if (_effective.Length < _entries.Count)
                 _effective = new float[_entries.Count];
 
-            float total = 0f;
+            for (int i = 0; i < _entries.Count; i++)
+                _effective[i] = EffectiveWeight(_entries[i]);
+
+            if (PreventRepeat && _lastPicked >= 0 && AnyPickableExcept(_lastPicked))
+                _effective[_lastPicked] = 0f;
+
+            return SumEffectiveWeights();
+        }
+
+        private bool AnyPickableExcept(int excluded)
+        {
             for (int i = 0; i < _entries.Count; i++)
             {
-                float weight = EffectiveWeight(_entries[i]);
-                _effective[i] = weight;
-                total += weight;
+                if (i != excluded && _effective[i] > 0f)
+                    return true;
             }
+            return false;
+        }
+
+        private float SumEffectiveWeights()
+        {
+            float total = 0f;
+            for (int i = 0; i < _entries.Count; i++)
+                total += _effective[i];
             return total;
         }
 

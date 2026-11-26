@@ -245,5 +245,96 @@ namespace ShadowLib.Tests
             Assert.IsFalse(t.TryGetStock("D", out _));
             Assert.AreEqual(43f, t.TotalWeight);
         }
+
+        [Test]
+        public void PreventRepeat_NeverRepeats_WithTwoOrMorePickable()
+        {
+            var t = PlainTable();
+            t.PreventRepeat = true;
+            var rng = new Xoshiro128StarStar(123UL);
+            string previous = t.Sample(rng);
+            for (int i = 0; i < 10_000; i++)
+            {
+                string next = t.Sample(rng);
+                Assert.AreNotEqual(previous, next);
+                previous = next;
+            }
+        }
+
+        [Test]
+        public void PreventRepeat_AllowsRepeat_WhenOnlyOnePickable()
+        {
+            var t = PlainTable();
+            t.PreventRepeat = true;
+            foreach (var s in new[] { "B", "C", "D" }) t.SetEnabled(s, false);
+            var rng = new Xoshiro128StarStar(123UL);
+            Assert.AreEqual("A", t.Sample(rng));
+            Assert.AreEqual(1f, t.GetProbability("A"));
+            Assert.AreEqual("A", t.Sample(rng));
+        }
+
+        [Test]
+        public void PreventRepeat_ExcludedItemReportsZeroProbability()
+        {
+            var t = PlainTable();
+            t.PreventRepeat = true;
+            Assert.IsTrue(t.SetLastPicked("D"));
+            Assert.AreEqual(0f, t.GetProbability("D"));
+            Assert.AreEqual(6f, t.TotalWeight);
+            Assert.AreEqual(0.5f, t.GetProbability("C"), 1e-6f);
+        }
+
+        [Test]
+        public void LastPicked_Lifecycle()
+        {
+            var t = PlainTable();
+            Assert.IsFalse(t.TryGetLastPicked(out _));
+            string picked = t.Sample(new Xoshiro128StarStar(123UL));
+            Assert.IsTrue(t.TryGetLastPicked(out string last));
+            Assert.AreEqual(picked, last);
+
+            t.SetEnabled(picked, false);
+            Assert.IsTrue(t.TryGetLastPicked(out _));
+            t.TryRemove(picked);
+            Assert.IsFalse(t.TryGetLastPicked(out _));
+
+            Assert.IsFalse(t.SetLastPicked("Z"));
+            string other = picked == "A" ? "B" : "A";
+            Assert.IsTrue(t.SetLastPicked(other));
+            t.ClearLastPicked();
+            Assert.IsFalse(t.TryGetLastPicked(out _));
+            t.SetLastPicked(other);
+            t.Clear();
+            Assert.IsFalse(t.TryGetLastPicked(out _));
+        }
+
+        [Test]
+        public void LastPicked_FollowsItsItem_WhenAnEarlierItemIsRemoved()
+        {
+            var t = PlainTable();
+            t.SetLastPicked("C");
+            t.TryRemove("A");
+            Assert.IsTrue(t.TryGetLastPicked(out string last));
+            Assert.AreEqual("C", last);
+        }
+
+        [Test]
+        public void Queries_DoNotChangeState()
+        {
+            var t = PlainTable();
+            t.PreventRepeat = true;
+            t.SetStock("A", 2);
+            t.SetLastPicked("B");
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+
+            for (int i = 0; i < 100; i++) { _ = t.TotalWeight; _ = t.GetProbability("A"); }
+
+            t.TryGetStock("A", out int units);
+            Assert.AreEqual(2, units);
+            t.TryGetLastPicked(out string last);
+            Assert.AreEqual("B", last);
+            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+        }
     }
 }
