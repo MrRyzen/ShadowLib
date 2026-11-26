@@ -8,7 +8,7 @@ Date: 2026-11-26. Roadmap items 13 and 14. Short design. Both were built from th
 public static T[] Place<T>(IRandom rng, IReadOnlyList<T> candidates, int count, float minDistance, Func<T, T, float> distanceFunc);
 ```
 
-- One `RandomUtils.Shuffle` of the candidate indices (`candidates.Count - 1` `Range` draws), then a single greedy pass: keep a candidate when its distance to every kept one is `>= minDistance`, stop at `count`.
+- A single greedy pass over a lazily shuffled order (forward Fisher-Yates: slot `i` swaps with `rng.Range(i, n)` only when it is reached, no draw for the last slot): keep a candidate when its distance to every kept one is `>= minDistance`, stop at `count`. So the number of draws is the number of candidates examined, not the list size. A NaN distance counts as too close.
 - Returns the kept candidates in kept order, possibly fewer than `count`. No retry, no optimal packing.
 - `count == 0` or no candidates: empty result, no draws.
 - Errors: null `rng` / `candidates` / `distanceFunc` → `ArgumentNullException`; negative `count`, negative or NaN `minDistance` → `ArgumentOutOfRangeException`.

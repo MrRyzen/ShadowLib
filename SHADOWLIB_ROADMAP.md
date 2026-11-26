@@ -60,8 +60,8 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 
 - **`BinPacker<TOccupant>`** — Polyomino bin packing on any `ISpace`. Strategies: FirstFit, BestFit (neighbor-contact scoring), BottomLeft. Includes `TryPlace`, `CanFit`, `AllFits`, and `AutoSort` (repack by decreasing size).
 - **`RandomWalk` + `DirectionBias`** — Seeded walk over a bounded grid, one orthogonal step at a time, with four direction weights. Steps that would leave the grid are never picked; the walk ends early if it has nowhere to go. Array and allocation-free `Span` forms. One RNG draw per step.
-- **`SpacedPlacement`** — Picks up to N candidates that keep a minimum distance from each other, using a caller-supplied distance function. Visits candidates in one seeded shuffle and keeps each that is clear of the ones already kept.
-- **`CellularAutomata`** — Birth / survive threshold rules stepped over a `FieldGrid<bool>` (eight neighbours, optional solid border), plus a seeded `Randomize` fill. No allocation per step after the first.
+- **`SpacedPlacement`** — Picks up to N candidates that keep a minimum distance from each other, using a caller-supplied distance function. Visits candidates in a seeded random order and keeps each that is clear of the ones already kept; one draw per candidate examined.
+- **`CellularAutomata`** — Birth / survive threshold rules stepped over a `FieldGrid<bool>` (eight neighbours, optional solid border), plus a seeded `Randomize` fill. No allocation per step once its scratch buffer fits the grid.
 - **`MarkovWordGenerator`** — Character-level order-N Markov word generation for procedural naming. `^`/`$` start/end markers, min/max length bounds, bounded retry, allocation-free `TryGenerate(Span<char>)`. Built on `MarkovChain<string>` k-gram states.
 
 ---

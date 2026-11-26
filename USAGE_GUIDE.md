@@ -15,7 +15,7 @@ This document is the canonical reference for using ShadowLib. It is written for 
 | `ShadowLib.RNG.Noise` | Simplex noise for terrain, density fields, fBm-textured maps. |
 | `ShadowLib.RNG.Utilities.ScalingCurve` | Level-driven progression curves (XP, damage scaling, drop weights). |
 | `ShadowLib.Spatial` | 2D grids, scalar fields, polyomino shapes, and a 3D inventory box that wears out. |
-| `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation. |
+| `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation, random walks, spaced placement, cellular automata. |
 | `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc condition strings (`ConditionEvaluator`), e.g. to drive a table's influence from data. |
 
 If you can't decide between modules, follow the dependency arrow: most things ultimately consume an `IRandom`, which comes from an **`Orchestrator`**. Start there.
@@ -592,7 +592,7 @@ var placed = packer.AutoSort(new (MyItem item, Polyomino shape)[] {
 using ShadowLib.Procedural;
 
 // A river crossing left to right: never steps back, drifts up and down.
-(int X, int Y)[] river = RandomWalk.Generate(rng, length: 40, width: 16, height: 5, start: (0, 2),
+(int X, int Y)[] river = RandomWalk.Generate(rng, length: 20, width: 16, height: 5, start: (0, 2),
     new DirectionBias(right: 0.6f, left: 0f, up: 0.2f, down: 0.2f));
 
 // A drunkard's walk for carving caves, written into your own buffer (no allocation).
@@ -602,7 +602,7 @@ int taken = RandomWalk.Generate(rng, steps, width: 32, height: 32, start: (16, 1
 
 - The first position is `start`; each next one is a single step right (+X), left (-X), up (+Y) or down (-Y).
 - A step that would leave the grid is never picked; the other directions keep their relative weights.
-- The walk ends early when no weighted direction is open (a right-only walk stops at the right edge), so check the array length or the returned count.
+- The walk ends early when no weighted direction is open (a right-only walk stops at the right edge), so check the array length or the returned count. The river above does not stop at the far edge: once there it keeps moving up and down, so pick a length that fits or cut the path at the first position with `X == width - 1`.
 - Cells can be visited more than once. One `rng.NextFloat()` per step taken.
 
 ### `SpacedPlacement` — random picks that keep their distance
@@ -615,10 +615,11 @@ int taken = RandomWalk.Generate(rng, steps, width: 32, height: 32, start: (16, 1
     distanceFunc: (a, b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y));
 ```
 
-- Candidates are visited in one shuffled order; each is kept if it is at least `minDistance` from everything already kept.
+- Candidates are visited in a random order; each is kept if it is at least `minDistance` from everything already kept. A NaN distance counts as too close.
 - It may return fewer than `count` when the spacing cannot be met in that order. It never returns candidates closer than `minDistance`.
 - `T` can be anything; the distance function defines what "apart" means (Manhattan, Euclidean, path length).
-- Draws one shuffle of the candidate list (nothing when `count` is 0 or there are no candidates).
+- One `rng.Range` draw per candidate examined, so picking a few from a long list is cheap (nothing is drawn when `count` is 0 or there are no candidates).
+- Results are distinct entries of the list. If the list itself holds the same value twice and `minDistance` is 0, both can come back.
 
 ### `CellularAutomata` — smooth noise into caves
 
@@ -633,7 +634,7 @@ rules.Step(cave, iterations: 4);
 - Each step looks at the eight cells around a cell: a dead cell comes alive with at least `birthRule` living neighbours, a living cell stays alive with at least `surviveRule`.
 - Cells outside the grid count as alive by default, which walls in the border; pass `edgesAlive: false` for open edges.
 - `Randomize` makes one `rng.NextFloat()` draw per cell, row by row. `Step` uses no randomness.
-- Keep one `CellularAutomata` and reuse it: it holds a scratch buffer, so steps after the first do not allocate. It is not thread-safe.
+- Keep one `CellularAutomata` and reuse it: it holds a scratch buffer, so a step allocates only when the grid is larger than any it has stepped before. It is not thread-safe.
 
 ### `MarkovWordGenerator` — character-level name generation
 

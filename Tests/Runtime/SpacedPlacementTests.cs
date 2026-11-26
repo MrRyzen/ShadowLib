@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using ShadowLib.Procedural;
 using ShadowLib.RNG.Sources;
-using ShadowLib.RNG.Utilities;
 
 namespace ShadowLib.Tests
 {
@@ -41,7 +40,7 @@ namespace ShadowLib.Tests
         }
 
         [Test]
-        public void Place_ZeroMinDistance_ReturnsExactlyCountDifferentCandidates()
+        public void Place_ZeroMinDistance_ReturnsExactlyCountCandidates()
         {
             var placed = SpacedPlacement.Place(new Xoshiro128StarStar(3UL), GridPoints(4, 4), 16, 0f, Manhattan);
 
@@ -74,15 +73,39 @@ namespace ShadowLib.Tests
         }
 
         [Test]
-        public void Place_DrawsOneShuffleOfTheCandidates()
+        public void Place_DrawsOncePerCandidateExamined()
         {
             var used = new Xoshiro128StarStar(11UL);
-            SpacedPlacement.Place(used, GridPoints(5, 5), 3, 2f, Manhattan);
+            SpacedPlacement.Place(used, GridPoints(5, 5), 3, 0f, Manhattan);
 
             var reference = new Xoshiro128StarStar(11UL);
-            RandomUtils.Shuffle(new int[25], reference);
+            reference.Range(0, 25);
+            reference.Range(1, 25);
+            reference.Range(2, 25);
 
             Assert.AreEqual(reference.NextUInt(), used.NextUInt());
+        }
+
+        [Test]
+        public void Place_ExaminingEveryCandidate_DrawsForAllButTheLast()
+        {
+            var used = new Xoshiro128StarStar(11UL);
+            SpacedPlacement.Place(used, GridPoints(4, 1), 4, 100f, Manhattan);
+
+            var reference = new Xoshiro128StarStar(11UL);
+            reference.Range(0, 4);
+            reference.Range(1, 4);
+            reference.Range(2, 4);
+
+            Assert.AreEqual(reference.NextUInt(), used.NextUInt());
+        }
+
+        [Test]
+        public void Place_NaNDistance_CountsAsTooClose()
+        {
+            var placed = SpacedPlacement.Place(new Xoshiro128StarStar(3UL), GridPoints(4, 1), 4, 1f, (a, b) => float.NaN);
+
+            Assert.AreEqual(1, placed.Length);
         }
 
         [Test]
@@ -100,7 +123,7 @@ namespace ShadowLib.Tests
         {
             var placed = SpacedPlacement.Place(new Xoshiro128StarStar(123UL), GridPoints(8, 6), 4, 4f, Manhattan);
 
-            CollectionAssert.AreEqual(new[] { (1, 5), (3, 0), (7, 3), (5, 5) }, placed);
+            CollectionAssert.AreEqual(new[] { (4, 2), (6, 5), (2, 5), (0, 3) }, placed);
         }
 
         [Test]

@@ -52,9 +52,31 @@ namespace ShadowLib.Tests
                 "###",
                 "###");
 
-            new CellularAutomata(birthRule: 9, surviveRule: 4, edgesAlive: false).Step(grid);
+            new CellularAutomata(birthRule: 9, surviveRule: 5, edgesAlive: false).Step(grid);
 
             CollectionAssert.AreEqual(new[] { ".#.", "###", ".#." }, Rows(grid));
+        }
+
+        [Test]
+        public void Step_NonSquareGrid_UsesColumnsAndRowsTheRightWayRound()
+        {
+            var grid = Grid(
+                "##..",
+                "...#");
+
+            new CellularAutomata(birthRule: 2, surviveRule: 9, edgesAlive: false).Step(grid);
+
+            CollectionAssert.AreEqual(new[] { "..#.", "###." }, Rows(grid));
+        }
+
+        [Test]
+        public void Randomize_ChanceZero_LeavesEveryCellDead_EvenOnTheLowestDraw()
+        {
+            var grid = new FieldGrid<bool>(4, 3, 1f, defaultValue: true);
+
+            CellularAutomata.Randomize(grid, new ShapeChecks.ConstantRandom(0f), 0f);
+
+            Assert.AreEqual(-1, grid.FindIndex(alive => alive));
         }
 
         [Test]

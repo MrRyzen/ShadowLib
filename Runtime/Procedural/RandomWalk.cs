@@ -72,6 +72,7 @@ namespace ShadowLib.Procedural
         {
             if (length <= 0)
                 throw new ArgumentOutOfRangeException(nameof(length), length, "Length must be greater than zero.");
+            Validate(rng, width, height, start, bias);
 
             var path = new (int X, int Y)[length];
             int written = Generate(rng, path.AsSpan(), width, height, start, bias);
@@ -84,6 +85,12 @@ namespace ShadowLib.Procedural
         /// <summary>
         /// Walks from <paramref name="start"/>, writing positions into <paramref name="path"/> without allocating.
         /// </summary>
+        /// <param name="rng">The random source. One <see cref="IRandom.NextFloat"/> per step taken.</param>
+        /// <param name="path">Receives the positions, start first. Arguments are checked even when it is empty.</param>
+        /// <param name="width">Grid width; X stays in 0..width-1.</param>
+        /// <param name="height">Grid height; Y stays in 0..height-1.</param>
+        /// <param name="start">The first position. Must be inside the grid.</param>
+        /// <param name="bias">The direction weights.</param>
         /// <returns>How many positions were written: the span length, or fewer if the walk had nowhere to go.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="rng"/> is null.</exception>
         /// <exception cref="ArgumentOutOfRangeException">Width or height is not positive, or the start is outside the grid.</exception>
@@ -91,16 +98,7 @@ namespace ShadowLib.Procedural
         public static int Generate(
             IRandom rng, Span<(int X, int Y)> path, int width, int height, (int X, int Y) start, DirectionBias bias)
         {
-            if (rng == null)
-                throw new ArgumentNullException(nameof(rng));
-            if (width <= 0)
-                throw new ArgumentOutOfRangeException(nameof(width), width, "Width must be greater than zero.");
-            if (height <= 0)
-                throw new ArgumentOutOfRangeException(nameof(height), height, "Height must be greater than zero.");
-            if (start.X < 0 || start.X >= width || start.Y < 0 || start.Y >= height)
-                throw new ArgumentOutOfRangeException(nameof(start), start, "The start must be inside the grid.");
-            if (!bias.HasAnyWeight)
-                throw new ArgumentException("The bias has no weights; use the constructor or DirectionBias.Uniform.", nameof(bias));
+            Validate(rng, width, height, start, bias);
             if (path.IsEmpty)
                 return 0;
 
@@ -130,6 +128,20 @@ namespace ShadowLib.Procedural
             }
 
             return path.Length;
+        }
+
+        private static void Validate(IRandom rng, int width, int height, (int X, int Y) start, DirectionBias bias)
+        {
+            if (rng == null)
+                throw new ArgumentNullException(nameof(rng));
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException(nameof(width), width, "Width must be greater than zero.");
+            if (height <= 0)
+                throw new ArgumentOutOfRangeException(nameof(height), height, "Height must be greater than zero.");
+            if (start.X < 0 || start.X >= width || start.Y < 0 || start.Y >= height)
+                throw new ArgumentOutOfRangeException(nameof(start), start, "The start must be inside the grid.");
+            if (!bias.HasAnyWeight)
+                throw new ArgumentException("The bias has no weights; use the constructor or DirectionBias.Uniform.", nameof(bias));
         }
     }
 }

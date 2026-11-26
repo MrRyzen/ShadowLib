@@ -85,6 +85,30 @@ namespace ShadowLib.Tests
         }
 
         [Test]
+        public void Generate_LowestDraw_SkipsABlockedDirection()
+        {
+            var path = RandomWalk.Generate(new ShapeChecks.ConstantRandom(0f), 2, 3, 3, (2, 1), DirectionBias.Uniform);
+
+            Assert.AreEqual((1, 1), path[1]);
+        }
+
+        [Test]
+        public void Generate_BadArguments_ThrowBeforeThePathIsAllocated()
+        {
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            try
+            {
+                RandomWalk.Generate(null!, 4_000_000, 4, 4, (0, 0), DirectionBias.Uniform);
+            }
+            catch (ArgumentNullException)
+            {
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.Less(allocated, 1_000_000L);
+        }
+
+        [Test]
         public void Generate_SingleCellGrid_ReturnsOnlyTheStart_WithoutDrawing()
         {
             var used = new Xoshiro128StarStar(9UL);

@@ -156,7 +156,7 @@ namespace ShadowLib.Runner
             Console.WriteLine($"\nGenerated polycube: {lump.CellCount} cells, {lump.Width}x{lump.Height}x{lump.Depth}, fits its 2x2x3 crate: {crate.Contains("Lump")}");
 
             var river = RandomWalk.Generate(
-                orchestrator.CreateRNG("river"), length: 40, width: 16, height: 5, start: (0, 2),
+                orchestrator.CreateRNG("river"), length: 20, width: 16, height: 5, start: (0, 2),
                 new DirectionBias(right: 0.6f, left: 0f, up: 0.2f, down: 0.2f));
             Console.WriteLine($"\nRandom walk, biased right ({river.Length} positions):");
             for (int y = 4; y >= 0; y--)
@@ -181,7 +181,7 @@ namespace ShadowLib.Runner
                 distanceFunc: (a, b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y));
 
             Console.WriteLine($"\nCellular automata cave with {torches.Length} spaced torches (T):");
-            for (int y = 0; y < cave.Height; y++)
+            for (int y = cave.Height - 1; y >= 0; y--)
             {
                 var line = new char[cave.Width];
                 for (int x = 0; x < cave.Width; x++)

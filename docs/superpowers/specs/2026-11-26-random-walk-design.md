@@ -42,7 +42,7 @@ public static class RandomWalk
 - `rng` null: `ArgumentNullException`.
 - A weight that is negative, NaN or infinite, or all four zero: `ArgumentOutOfRangeException` from the `DirectionBias` constructor. `default(DirectionBias)` (all zero) is rejected by `Generate` with `ArgumentException`.
 - `width` or `height` `<= 0`, `start` outside the bounds, `length <= 0`: `ArgumentOutOfRangeException`.
-- An empty span returns 0.
+- An empty span returns 0, after the other arguments are checked.
 
 ## Approaches
 
