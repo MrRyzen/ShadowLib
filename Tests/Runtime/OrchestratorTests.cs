@@ -256,14 +256,59 @@ namespace ShadowLib.Tests
             byte[] trailing = new byte[good.Length + 1];
             good.CopyTo(trailing, 0);
             byte[] shortState = (byte[])good.Clone();
-            shortState[18] = 15; // state length of "loot", after version, root, count and the name
+            shortState[25] = 15; // state length of "loot", after version, root, count and the name
             byte[] negativeCount = (byte[])good.Clone();
             negativeCount[12] = 0xFF; // top byte of the stream count
+            byte[] negativeNameLength = (byte[])good.Clone();
+            negativeNameLength[16] = 0xFF; // top byte of the first name length
+            byte[] hugeNameLength = (byte[])good.Clone();
+            hugeNameLength[16] = 0x7F;
+            byte[] minusOneNameLength = { 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F };
 
-            foreach (var bad in new[] { Array.Empty<byte>(), wrongVersion, truncated, trailing, shortState, negativeCount, new byte[] { 1, 2, 3 } })
+            var badInputs = new[]
+            {
+                Array.Empty<byte>(), wrongVersion, truncated, trailing, shortState, negativeCount,
+                negativeNameLength, hugeNameLength, minusOneNameLength, new byte[] { 1, 2, 3 },
+            };
+            foreach (var bad in badInputs)
                 Assert.Throws<System.IO.InvalidDataException>(() => orchestrator.Load(bad));
 
             CollectionAssert.AreEqual(good, orchestrator.Save());
+        }
+
+        [Test]
+        public void SaveLoad_RoundTripsContextsThatAreNotValidUnicode()
+        {
+            const string loneHigh = "x\uD800";
+            const string loneLow = "y\uDC00";
+
+            var orchestrator = new Orchestrator(Root);
+            var held = orchestrator.CreateRNG(loneHigh);
+            Take(held, 3);
+            orchestrator.Next(loneLow);
+            byte[] save = orchestrator.Save();
+
+            var expectedStream = Take(held);
+            var expectedNext = Take(orchestrator.Next(loneLow));
+            orchestrator.Load(save);
+
+            CollectionAssert.AreEqual(expectedStream, Take(held));
+            CollectionAssert.AreEqual(expectedNext, Take(orchestrator.Next(loneLow)));
+        }
+
+        [Test]
+        public void DerivedSeeds_ArePinned()
+        {
+            var orchestrator = new Orchestrator(Root);
+            Assert.Multiple(() =>
+            {
+                Assert.AreEqual(12272802129764948880UL, orchestrator.GetSeedForContext("loot"));
+                Assert.AreEqual(9757930247165329179UL, orchestrator.DeriveSeed("chunk/3/4"));
+                Assert.AreEqual(6675807431912869110UL, orchestrator.NextSeed("chest"));
+                Assert.AreEqual(10611638617161966788UL, orchestrator.NextSeed("chest"));
+                Assert.AreEqual(8268479845200024211UL, orchestrator.Fork("world/2").RootSeed);
+                Assert.AreEqual(18315876358090669558UL, Seeding.DeriveSeed64(42UL, 7UL));
+            });
         }
     }
 }

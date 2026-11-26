@@ -13,7 +13,7 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - `Orchestrator.Fork(context)` for an independent child orchestrator, and `Orchestrator.RootSeed`.
 - `Xoshiro128`: the xoshiro128** generator as an unmanaged struct for Unity jobs, Burst and ECS. Same output as `Xoshiro128StarStar` for the same seed.
 - `Seeding.DeriveSeed64(ulong rootSeed, ulong index)`: arithmetic-only seed derivation, usable inside jobs.
-- `Orchestrator` is thread-safe. Generators remain single-threaded.
+- `Orchestrator`'s stream and seed members are thread-safe. Generators remain single-threaded, and `Save` / `Load` must not overlap with draws from a `CreateRNG` stream on another thread.
 
 ### Removed
 

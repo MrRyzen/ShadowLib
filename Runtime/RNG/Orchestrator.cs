@@ -3,7 +3,6 @@ namespace ShadowLib.RNG
     using System;
     using System.Collections.Generic;
     using System.IO;
-    using System.Text;
     using ShadowLib.RNG.Sources;
     using ShadowLib.RNG.Utilities;
 
@@ -18,7 +17,9 @@ namespace ShadowLib.RNG
     /// <item><description><see cref="Derive"/>: throwaway, the same stream on every call for a context.</description></item>
     /// <item><description><see cref="Next"/>: throwaway, the next stream in a replayable per-context series.</description></item>
     /// </list>
-    /// All members are safe to call from multiple threads. The returned generators are not: use each from one thread.
+    /// The members that hand out streams and seeds are safe to call from multiple threads. The returned generators
+    /// are not: use each from one thread. <see cref="Save"/> and <see cref="Load"/> read and write the long-lived
+    /// streams themselves, so call them only while no other thread is drawing from a <see cref="CreateRNG"/> stream.
     /// <see cref="Next"/> and <see cref="NextSeed"/> hand out series positions in call order, so call them from one
     /// thread if the run must replay.
     /// </remarks>
@@ -120,11 +121,12 @@ namespace ShadowLib.RNG
         /// Captures everything needed to resume this orchestrator: the root seed, the state of every long-lived
         /// stream and the position of every <see cref="Next"/> series. Equal state always yields equal bytes.
         /// Store the result however you like; restore it with <see cref="Load"/>.
+        /// Not safe to call while another thread is drawing from a <see cref="CreateRNG"/> stream.
         /// </summary>
         public byte[] Save()
         {
             using var buffer = new MemoryStream();
-            using var writer = new BinaryWriter(buffer, Encoding.UTF8);
+            using var writer = new BinaryWriter(buffer);
 
             lock (_gate)
             {
@@ -135,7 +137,7 @@ namespace ShadowLib.RNG
                 foreach (string context in SortedKeys(_streams))
                 {
                     byte[] state = _streams[context].GetState();
-                    writer.Write(context);
+                    WriteContext(writer, context);
                     writer.Write(state.Length);
                     writer.Write(state);
                 }
@@ -143,7 +145,7 @@ namespace ShadowLib.RNG
                 writer.Write(_nextCounters.Count);
                 foreach (string context in SortedKeys(_nextCounters))
                 {
-                    writer.Write(context);
+                    WriteContext(writer, context);
                     writer.Write(_nextCounters[context]);
                 }
             }
@@ -156,6 +158,7 @@ namespace ShadowLib.RNG
         /// Restores a state produced by <see cref="Save"/>, replacing the root seed, stream states and series positions.
         /// Streams already handed out are restored in place, so references to them stay valid. A long-lived stream
         /// that is not in the save restarts from its seed under the loaded root.
+        /// Not safe to call while another thread is drawing from a <see cref="CreateRNG"/> stream.
         /// </summary>
         /// <exception cref="InvalidDataException">The data is not a complete save of a supported version. Nothing is changed.</exception>
         public void Load(ReadOnlySpan<byte> data)
@@ -166,7 +169,7 @@ namespace ShadowLib.RNG
 
             try
             {
-                using var reader = new BinaryReader(new MemoryStream(data.ToArray()), Encoding.UTF8);
+                using var reader = new BinaryReader(new MemoryStream(data.ToArray()));
 
                 byte version = reader.ReadByte();
                 if (version != SaveVersion)
@@ -177,7 +180,7 @@ namespace ShadowLib.RNG
                 int streamCount = ReadCount(reader);
                 for (int i = 0; i < streamCount; i++)
                 {
-                    string context = reader.ReadString();
+                    string context = ReadContext(reader);
                     if (reader.ReadInt32() != StreamStateLength)
                         throw new InvalidDataException($"Stream '{context}' has an unsupported state length.");
                     byte[] state = reader.ReadBytes(StreamStateLength);
@@ -190,7 +193,7 @@ namespace ShadowLib.RNG
                 int counterCount = ReadCount(reader);
                 for (int i = 0; i < counterCount; i++)
                 {
-                    string context = reader.ReadString();
+                    string context = ReadContext(reader);
                     if (!counters.TryAdd(context, reader.ReadUInt64()))
                         throw new InvalidDataException($"Series '{context}' appears twice.");
                 }
@@ -198,7 +201,7 @@ namespace ShadowLib.RNG
                 if (reader.BaseStream.Position != reader.BaseStream.Length)
                     throw new InvalidDataException("Orchestrator save has trailing data.");
             }
-            catch (Exception e) when (e is EndOfStreamException || e is FormatException)
+            catch (EndOfStreamException e)
             {
                 throw new InvalidDataException("Orchestrator save is truncated or corrupt.", e);
             }
@@ -235,6 +238,26 @@ namespace ShadowLib.RNG
             if (count < 0)
                 throw new InvalidDataException("Orchestrator save has a negative count.");
             return count;
+        }
+
+        // Names are stored as raw UTF-16 code units, the same units seeds are hashed from, so every string round-trips.
+        private static void WriteContext(BinaryWriter writer, string context)
+        {
+            writer.Write(context.Length);
+            foreach (char unit in context)
+                writer.Write((ushort)unit);
+        }
+
+        private static string ReadContext(BinaryReader reader)
+        {
+            int length = ReadCount(reader);
+            if (length > (reader.BaseStream.Length - reader.BaseStream.Position) / sizeof(char))
+                throw new EndOfStreamException();
+
+            var units = new char[length];
+            for (int i = 0; i < length; i++)
+                units[i] = (char)reader.ReadUInt16();
+            return new string(units);
         }
 
         private static List<string> SortedKeys<TValue>(Dictionary<string, TValue> source)

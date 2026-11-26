@@ -125,9 +125,10 @@ A save holds the root seed, the state of every `CreateRNG` stream and the positi
 
 ### 4. Threads, Unity jobs, Burst and ECS
 
-Every `Orchestrator` member is safe to call from multiple threads. The generators it returns are not:
+The `Orchestrator` members that hand out streams and seeds (`CreateRNG`, `Derive`, `Next`, `DeriveSeed`, `NextSeed`, `Fork`) are safe to call from multiple threads. The generators they return are not:
 
 - **One generator per thread or per job iteration.** Never share an `IRandom` or `Xoshiro128` between threads.
+- **`Save` and `Load` need the long-lived streams to be idle.** They read and write the `CreateRNG` streams directly, so call them only while no other thread is drawing from one (finish or pause worker jobs first). A save taken mid-draw can capture a half-advanced stream that does not replay.
 - **`Derive` / `DeriveSeed` are order-independent**, so they are safe to call from anywhere and still replay.
 - **`Next` / `NextSeed` hand out series positions in call order.** Calling them from racing threads is safe but not replayable. Call them from one thread and pass the result in.
 
