@@ -5,15 +5,13 @@ namespace ShadowLib.RNG.Distributions
     using System.Collections.Generic;
 
     /// <summary>
-    /// A dynamic weight table that allows adding, updating, and removing items with associated weights.
-    /// Maintains separate base and dynamic weights so modifications do not alter the original base weights.
+    /// Weighted sampling table. Each item has a designed weight that is never changed by sampling;
+    /// what a pick actually uses is the item's effective weight, computed at pick time.
     /// </summary>
-    /// <typeparam name="T">The type of items in the weight table.</typeparam>
+    /// <typeparam name="T">The type of items in the table.</typeparam>
     /// <remarks>
-    /// This class while similar to WeightTable it is optimized for frequent weight changes without needing to rebuild the entire table on each change.
-    /// It uses a dirty flag to track when the cumulative weights need to be recalculated.
-    /// Base weights represent the original distribution and are preserved across dynamic modifications.
-    /// Call <see cref="ResetWeights"/> to restore dynamic weights back to their base values.
+    /// Every pick consumes exactly one <see cref="IRandom.NextFloat"/> draw, and none when nothing is pickable.
+    /// Not thread-safe.
     /// </remarks>
     public class DynamicWeightTable<T> where T : IEquatable<T>
     {
@@ -21,385 +19,205 @@ namespace ShadowLib.RNG.Distributions
         {
             public T Item;
             public float Weight;
+            public bool Enabled;
         }
 
         private readonly List<Entry> _entries;
-        private readonly List<Entry> _baseEntries;
-        private float _totalWeight;
-        private bool _isDirty;
+        private float[] _effective = Array.Empty<float>();
 
-        // Cached cumulative weights for binary search
-        private float[] _cumulativeWeights;
-
-        /// <summary>
-        /// Gets the number of items in the weight table.
-        /// </summary>
-        public int Count => _entries.Count;
-
-        /// <summary>
-        /// Gets the total dynamic weight of all items in the weight table.
-        /// </summary>
-        public float TotalWeight
-        {
-            get
-            {
-                RebuildIfDirty();
-                return _totalWeight;
-            }
-        }
-
-        /// <summary>
-        /// Initializes a new instance of the <see cref="DynamicWeightTable{T}"/> class with an optional initial capacity.
-        /// </summary>
-        /// <param name="initialCapacity">Initial capacity for the internal lists.</param>
+        /// <summary>Initializes an empty table.</summary>
+        /// <param name="initialCapacity">Initial capacity of the item list.</param>
         public DynamicWeightTable(int initialCapacity = 16)
         {
             _entries = new List<Entry>(initialCapacity);
-            _baseEntries = new List<Entry>(initialCapacity);
-            _cumulativeWeights = Array.Empty<float>();
-            _isDirty = false;
         }
 
-        /// <summary>
-        /// Adds an item with the specified weight to the weight table.
-        /// The weight is stored as both the base weight and the current dynamic weight.
-        /// </summary>
+        /// <summary>Gets the number of items in the table, pickable or not.</summary>
+        public int Count => _entries.Count;
+
+        /// <summary>Gets the sum of the effective weights a pick would use right now.</summary>
+        public float TotalWeight => ComputeEffectiveWeights();
+
+        /// <summary>Adds an item with its designed weight.</summary>
         /// <param name="item">The item to add.</param>
-        /// <param name="weight">The weight associated with the item. Must be greater than zero.</param>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the weight is less than or equal to zero.</exception>
+        /// <param name="weight">The designed weight. Must be finite and greater than zero.</param>
+        /// <exception cref="ArgumentOutOfRangeException">The weight is not finite or not greater than zero.</exception>
+        /// <exception cref="ArgumentException">The item is already in the table.</exception>
         public void Add(T item, float weight)
         {
-            if (weight <= 0f)
-                throw new ArgumentOutOfRangeException(nameof(weight), "Weight must be greater than zero.");
+            RequirePositiveFinite(weight, nameof(weight));
+            if (IndexOf(item) >= 0)
+                throw new ArgumentException("Item is already in the table.", nameof(item));
 
-            var entry = new Entry { Item = item, Weight = weight };
-            _baseEntries.Add(entry);
-            _entries.Add(entry);
-            _isDirty = true;
+            _entries.Add(new Entry { Item = item, Weight = weight, Enabled = true });
         }
 
-        /// <summary>
-        /// Returns whether the table contains the specified item.
-        /// </summary>
-        /// <param name="item">The item to check for.</param>
-        /// <returns>True if the item exists in the table; otherwise, false.</returns>
-        public bool Contains(T item)
-        {
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                    return true;
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Gets the current dynamic weight of the specified item.
-        /// </summary>
-        /// <param name="item">The item to look up.</param>
-        /// <returns>The current dynamic weight of the item.</returns>
-        /// <exception cref="KeyNotFoundException">Thrown when the item is not found.</exception>
-        public float GetWeight(T item)
-        {
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                    return _entries[i].Weight;
-            }
-            throw new KeyNotFoundException($"Item not found in the weight table.");
-        }
-
-        /// <summary>
-        /// Tries to get the current dynamic weight of the specified item.
-        /// </summary>
-        /// <param name="item">The item to look up.</param>
-        /// <param name="weight">When this method returns, contains the weight if found; otherwise, 0.</param>
-        /// <returns>True if the item was found; otherwise, false.</returns>
-        public bool TryGetWeight(T item, out float weight)
-        {
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                {
-                    weight = _entries[i].Weight;
-                    return true;
-                }
-            }
-            weight = 0f;
-            return false;
-        }
-
-        /// <summary>
-        /// Gets the base weight of the specified item.
-        /// </summary>
-        /// <param name="item">The item to look up.</param>
-        /// <returns>The base weight of the item.</returns>
-        /// <exception cref="KeyNotFoundException">Thrown when the item is not found.</exception>
-        public float GetBaseWeight(T item)
-        {
-            for (int i = 0; i < _baseEntries.Count; i++)
-            {
-                if (_baseEntries[i].Item.Equals(item))
-                    return _baseEntries[i].Weight;
-            }
-            throw new KeyNotFoundException($"Item not found in the weight table.");
-        }
-
-        /// <summary>
-        /// Tries to get the base weight of the specified item.
-        /// </summary>
-        /// <param name="item">The item to look up.</param>
-        /// <param name="weight">When this method returns, contains the base weight if found; otherwise, 0.</param>
-        /// <returns>True if the item was found; otherwise, false.</returns>
-        public bool TryGetBaseWeight(T item, out float weight)
-        {
-            for (int i = 0; i < _baseEntries.Count; i++)
-            {
-                if (_baseEntries[i].Item.Equals(item))
-                {
-                    weight = _baseEntries[i].Weight;
-                    return true;
-                }
-            }
-            weight = 0f;
-            return false;
-        }
-
-        /// <summary>
-        /// Sets the dynamic weight of an existing item. Does not modify the base weight.
-        /// </summary>
-        /// <param name="item">The item to update.</param>
-        /// <param name="newWeight">The new dynamic weight for the item. Must be greater than zero.</param>
-        /// <returns>True if the item was found and updated; otherwise, false.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the new weight is less than or equal to zero.</exception>
-        public bool SetWeight(T item, float newWeight)
-        {
-            if (newWeight <= 0f)
-                throw new ArgumentOutOfRangeException(nameof(newWeight), "Weight must be greater than zero.");
-
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                {
-                    _entries[i] = new Entry { Item = item, Weight = newWeight };
-                    _isDirty = true;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Sets the base weight of an existing item. Also updates the dynamic weight to match.
-        /// </summary>
-        /// <param name="item">The item to update.</param>
-        /// <param name="newBaseWeight">The new base weight. Must be greater than zero.</param>
-        /// <returns>True if the item was found and updated; otherwise, false.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the new weight is less than or equal to zero.</exception>
-        public bool SetBaseWeight(T item, float newBaseWeight)
-        {
-            if (newBaseWeight <= 0f)
-                throw new ArgumentOutOfRangeException(nameof(newBaseWeight), "Weight must be greater than zero.");
-
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                {
-                    _baseEntries[i] = new Entry { Item = item, Weight = newBaseWeight };
-                    _entries[i] = new Entry { Item = item, Weight = newBaseWeight };
-                    _isDirty = true;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Adds weight to an existing item's dynamic weight. If the item does not exist, it returns false.
-        /// Does not modify the base weight.
-        /// </summary>
-        /// <param name="item">The item to update.</param>
-        /// <param name="weight">The weight to add (can be positive or negative). If resulting weight is &lt;= 0, the item is removed.</param>
-        /// <returns>True if the item was found and updated; otherwise, false.</returns>
-        /// <remarks>
-        /// This method will NOT create new items. If you attempt to add weight to a non-existent item,
-        /// it returns false and no change occurs. Use <see cref="Add"/> to create new items.
-        /// Note: removing an item via negative weight also removes its base weight entry.
-        /// </remarks>
-        public bool AddWeight(T item, float weight)
-        {
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                {
-                    float newWeight = _entries[i].Weight + weight;
-                    if (newWeight <= 0f)
-                    {
-                        _entries.RemoveAt(i);
-                        _baseEntries.RemoveAt(i);
-                    }
-                    else
-                    {
-                        _entries[i] = new Entry { Item = item, Weight = newWeight };
-                    }
-                    _isDirty = true;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Multiplies the dynamic weight of an item by a factor. Does not modify the base weight.
-        /// </summary>
-        /// <param name="item">The item to update.</param>
-        /// <param name="factor">The factor to multiply the dynamic weight by. Must be greater than zero.</param>
-        /// <returns>True if the item was found and updated; otherwise, false.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Thrown when the factor is less than or equal to zero.</exception>
-        public bool MultiplyWeight(T item, float factor)
-        {
-            if (factor <= 0f)
-                throw new ArgumentOutOfRangeException(nameof(factor), "Factor must be greater than zero.");
-
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                {
-                    float newWeight = _entries[i].Weight * factor;
-                    _entries[i] = new Entry { Item = item, Weight = newWeight };
-                    _isDirty = true;
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Resets all dynamic weights back to their base weight values.
-        /// </summary>
-        public void ResetWeights()
-        {
-            if (_entries.Count == 0) return;
-
-            for (int i = 0; i < _baseEntries.Count; i++)
-            {
-                _entries[i] = _baseEntries[i];
-            }
-            _isDirty = true;
-        }
-
-        /// <summary>
-        /// Sets all dynamic item weights to a uniform value so they sum to 1.0.
-        /// Does not modify base weights.
-        /// </summary>
-        public void UniformWeights()
-        {
-            if (_entries.Count == 0) return;
-
-            float uniformWeight = 1f / _entries.Count;
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                _entries[i] = new Entry { Item = _entries[i].Item, Weight = uniformWeight };
-            }
-            _isDirty = true;
-        }
-
-        /// <summary>
-        /// Normalizes all dynamic weights so they sum to 1.0, preserving their relative proportions.
-        /// Does not modify base weights.
-        /// </summary>
-        public void NormalizeWeights()
-        {
-            if (_entries.Count == 0) return;
-
-            RebuildIfDirty();
-
-            if (_totalWeight <= 0f) return;
-
-            float invTotal = 1f / _totalWeight;
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                _entries[i] = new Entry { Item = _entries[i].Item, Weight = _entries[i].Weight * invTotal };
-            }
-            _isDirty = true;
-        }
-
-        /// <summary>
-        /// Removes the specified item from the weight table (both base and dynamic entries).
-        /// </summary>
-        /// <param name="item">The item to remove.</param>
-        /// <returns>True if the item was found and removed; otherwise, false.</returns>
+        /// <summary>Removes an item and everything configured for it.</summary>
+        /// <returns>True if the item was found.</returns>
         public bool TryRemove(T item)
         {
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                if (_entries[i].Item.Equals(item))
-                {
-                    _entries.RemoveAt(i);
-                    _baseEntries.RemoveAt(i);
-                    _isDirty = true;
-                    return true;
-                }
-            }
-            return false;
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            _entries.RemoveAt(index);
+            return true;
         }
 
-        /// <summary>
-        /// Clears all items from the weight table (both base and dynamic) and resets the total weight to zero.
-        /// </summary>
+        /// <summary>Removes every item.</summary>
         public void Clear()
         {
             _entries.Clear();
-            _baseEntries.Clear();
-            _totalWeight = 0f;
-            _isDirty = false;
         }
 
-        /// <summary>
-        /// Selects a random item from the weight table based on their dynamic weights.
-        /// </summary>
-        /// <param name="rng">The random number generator to use for selection.</param>
-        /// <returns>A randomly selected item.</returns>
-        /// <exception cref="InvalidOperationException">Thrown when the weight table is empty.</exception>
+        /// <summary>Returns whether the table contains the item.</summary>
+        public bool Contains(T item) => IndexOf(item) >= 0;
+
+        /// <summary>Gets the designed weight of an item.</summary>
+        /// <exception cref="KeyNotFoundException">The item is not in the table.</exception>
+        public float GetWeight(T item)
+        {
+            int index = IndexOf(item);
+            if (index < 0)
+                throw new KeyNotFoundException("Item not found in the weight table.");
+            return _entries[index].Weight;
+        }
+
+        /// <summary>Tries to get the designed weight of an item.</summary>
+        /// <returns>True if the item was found.</returns>
+        public bool TryGetWeight(T item, out float weight)
+        {
+            int index = IndexOf(item);
+            weight = index < 0 ? 0f : _entries[index].Weight;
+            return index >= 0;
+        }
+
+        /// <summary>Sets the designed weight of an item.</summary>
+        /// <param name="item">The item to update.</param>
+        /// <param name="weight">The new designed weight. Must be finite and greater than zero.</param>
+        /// <returns>True if the item was found.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The weight is not finite or not greater than zero.</exception>
+        public bool SetWeight(T item, float weight)
+        {
+            RequirePositiveFinite(weight, nameof(weight));
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            Entry entry = _entries[index];
+            entry.Weight = weight;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>Enables or disables an item. A disabled item stays in the table but is never picked.</summary>
+        /// <returns>True if the item was found.</returns>
+        public bool SetEnabled(T item, bool enabled)
+        {
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            Entry entry = _entries[index];
+            entry.Enabled = enabled;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>Returns whether an item is enabled. False if the item is not in the table.</summary>
+        public bool IsEnabled(T item)
+        {
+            int index = IndexOf(item);
+            return index >= 0 && _entries[index].Enabled;
+        }
+
+        /// <summary>Gets the chance, from 0 to 1, that the next <see cref="Sample"/> returns the item.</summary>
+        /// <returns>The probability, or 0 if the item is missing or nothing is pickable.</returns>
+        public float GetProbability(T item)
+        {
+            int index = IndexOf(item);
+            if (index < 0) return 0f;
+
+            float total = ComputeEffectiveWeights();
+            return total > 0f ? _effective[index] / total : 0f;
+        }
+
+        /// <summary>Picks an item by effective weight.</summary>
+        /// <param name="rng">The random number generator to draw from.</param>
+        /// <exception cref="InvalidOperationException">Nothing is pickable.</exception>
         public T Sample(IRandom rng)
         {
-            if (_entries.Count == 0)
-                throw new InvalidOperationException("Table is empty.");
-
-            RebuildIfDirty();
-
-            float target = rng.NextFloat() * _totalWeight;
-
-            // Binary search
-            int lo = 0, hi = _entries.Count - 1;
-            while (lo < hi)
-            {
-                int mid = (lo + hi) >> 1;
-                if (_cumulativeWeights[mid] < target)
-                    lo = mid + 1;
-                else
-                    hi = mid;
-            }
-
-            return _entries[lo].Item;
+            if (!TrySample(rng, out T item))
+                throw new InvalidOperationException("Nothing in the table is pickable.");
+            return item;
         }
 
-        private void RebuildIfDirty()
+        /// <summary>Picks an item by effective weight, without throwing when nothing is pickable.</summary>
+        /// <param name="rng">The random number generator to draw from.</param>
+        /// <param name="item">The picked item, or default when nothing is pickable.</param>
+        /// <returns>True if an item was picked. When false, no random number was drawn.</returns>
+        public bool TrySample(IRandom rng, out T item)
         {
-            if (!_isDirty) return;
+            if (rng == null) throw new ArgumentNullException(nameof(rng));
 
-            if (_cumulativeWeights.Length < _entries.Count)
-                _cumulativeWeights = new float[_entries.Count];
-
-            float cumulative = 0f;
-            for (int i = 0; i < _entries.Count; i++)
+            float total = ComputeEffectiveWeights();
+            if (total <= 0f)
             {
-                cumulative += _entries[i].Weight;
-                _cumulativeWeights[i] = cumulative;
+                item = default!;
+                return false;
             }
 
-            _totalWeight = cumulative;
-            _isDirty = false;
+            item = _entries[PickIndex(rng, total)].Item;
+            return true;
+        }
+
+        private float ComputeEffectiveWeights()
+        {
+            if (_effective.Length < _entries.Count)
+                _effective = new float[_entries.Count];
+
+            float total = 0f;
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                float weight = EffectiveWeight(_entries[i]);
+                _effective[i] = weight;
+                total += weight;
+            }
+            return total;
+        }
+
+        private static float EffectiveWeight(in Entry entry)
+        {
+            return entry.Enabled ? entry.Weight : 0f;
+        }
+
+        private int PickIndex(IRandom rng, float total)
+        {
+            float target = rng.NextFloat() * total;
+            float running = 0f;
+            int lastPickable = -1;
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (_effective[i] <= 0f) continue;
+
+                running += _effective[i];
+                lastPickable = i;
+                if (running >= target) return i;
+            }
+            return lastPickable;
+        }
+
+        private int IndexOf(T item)
+        {
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                if (_entries[i].Item.Equals(item))
+                    return i;
+            }
+            return -1;
+        }
+
+        private static void RequirePositiveFinite(float value, string paramName)
+        {
+            if (!(value > 0f) || float.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(paramName, "Weight must be finite and greater than zero.");
         }
     }
 }
