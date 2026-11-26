@@ -52,73 +52,44 @@ namespace ShadowLib.RNG.Sources
     }
 
     /// <summary>
-    /// xoshiro128** PRNG (Blackman and Vigna). Deterministic, fast, good statistical quality.
-    /// Not cryptographically secure.
-    ///
-    /// State: 4x uint (128-bit). Seeded via SplitMix64 (ulong).
+    /// xoshiro128** PRNG (Blackman and Vigna) as an unmanaged value type.
+    /// Holds no references, so it can be stored by value in Unity jobs, Burst code and ECS components.
+    /// Not thread-safe and not cryptographically secure: use one instance per thread or job iteration.
     /// </summary>
-    public sealed class Xoshiro128StarStar : IRandom
+    /// <remarks>
+    /// This is a mutable struct. Keep it in a local or a non-readonly field, and pass it by <c>ref</c>
+    /// when a callee should advance it; a copy advances independently of the original.
+    /// </remarks>
+    [Serializable]
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Xoshiro128
     {
-        // 128-bit state: 4x 32-bit
         private uint _s0, _s1, _s2, _s3;
 
-        // Float/double scaling constants
         private const float INV_24BIT = 1f / (1 << 24);                  // 2^-24
         private const double INV_53BIT = 1.0 / (1UL << 53);              // 2^-53
 
         /// <summary>
-        /// Gets or sets the internal state of the generator as a Xoshiro128State struct. This allows for easy saving and restoring of the generator's state.
-        /// </summary> 
+        /// Create with an explicit 64-bit seed.
+        /// </summary>
+        public Xoshiro128(ulong seed)
+        {
+            _s0 = _s1 = _s2 = _s3 = 0u;
+            Seed(seed);
+        }
+
+        /// <summary>
+        /// Gets or sets the full generator state. An all-zero state is invalid and is replaced by a non-zero one.
+        /// </summary>
         public Xoshiro128State State
         {
-            get => new() { S0 = _s0, S1 = _s1, S2 = _s2, S3 = _s3 };
+            readonly get => new Xoshiro128State { S0 = _s0, S1 = _s1, S2 = _s2, S3 = _s3 };
             set
             {
                 _s0 = value.S0; _s1 = value.S1; _s2 = value.S2; _s3 = value.S3;
                 if ((_s0 | _s1 | _s2 | _s3) == 0u) _s0 = 1u;
             }
         }
-
-        /// <summary>
-        /// Create with explicit 64-bit seed.
-        /// </summary>
-        public Xoshiro128StarStar(ulong seed)
-        {
-            Seed(seed);
-        }
-
-        /// <summary>
-        /// Create with high-entropy OS seed (non-deterministic).
-        /// </summary>
-        public Xoshiro128StarStar()
-        {
-            Seed(Utilities.Seeding.GenerateSeed64());
-        }
-
-
-        /// <summary>
-        /// Gets the current state of the RNG as a byte array. 
-        /// This can be used to save the state for later restoration. 
-        /// The byte array is 16 bytes long, representing the four 32-bit unsigned integers of the state.
-        /// </summary>
-        /// <returns>A byte array representing the current state of the RNG.</returns>
-        public byte[] GetState() => State.ToBytes();
-
-        /// <summary>
-        /// Sets the state of the RNG from a byte array. This can be used to restore a previously saved state. The byte array must be at least 16 bytes long and should be in the format produced by GetState, where the first 4 bytes correspond to S0, the next 4 bytes to S1, the next 4 bytes to S2, and the last 4 bytes to S3.
-        /// </summary>
-        /// <param name="state">A byte array representing the state to restore. Must be in the format returned by GetState.</param>
-        public void SetState(byte[] state) => SetState(state.AsSpan());
-
-        /// <summary>
-        /// Sets the state of the RNG from a read-only span of bytes. This can be used to restore a previously saved state without allocating a new array. The span must be at least 16 bytes long and should be in the format produced by GetState, where the first 4 bytes correspond to S0, the next 4 bytes to S1, the next 4 bytes to S2, and the last 4 bytes to S3.
-        /// </summary>
-        /// <param name="state">A read-only span of bytes representing the state to restore. Must be in the format returned by GetState.</param>
-        public void SetState(ReadOnlySpan<byte> state)
-        {
-            State = Xoshiro128State.FromBytes(state);
-        }
-
 
         /// <summary>
         /// Re-seed this generator deterministically.
@@ -183,6 +154,7 @@ namespace ShadowLib.RNG.Sources
             ulong lo = NextUInt();
             return (hi << 32) | lo;
         }
+
         /// <summary>
         /// Uniform float in [0,1).
         /// Uses top 24 bits (good practice).
@@ -205,7 +177,7 @@ namespace ShadowLib.RNG.Sources
         /// Uniform int in [min, max) with NO modulo bias.
         /// </summary>
         /// <remarks>
-        /// (max-min) must be <= 2^32 to avoid overflow. For larger ranges, use Range(ulong, ulong).
+        /// (max-min) must be &lt;= 2^32 to avoid overflow. For larger ranges, use Range(ulong, ulong).
         /// This uses rejection sampling with a threshold to ensure uniformity without bias, even for ranges that do not divide 2^32 evenly.
         /// </remarks>
         public int Range(int min, int max)
@@ -226,12 +198,10 @@ namespace ShadowLib.RNG.Sources
                     return min + (int)(r % range);
             }
         }
+
         /// <summary>
         /// Generates a random float within the specified range [min, max).
         /// </summary>
-        /// <param name="min"></param>
-        /// <param name="max"></param>
-        /// <returns></returns>
         public float Range(float min, float max)
         {
             if (max <= min)
@@ -240,12 +210,10 @@ namespace ShadowLib.RNG.Sources
             // Explicit casts pin every step to single precision on runtimes that evaluate float math in double.
             return (float)((float)(NextFloat() * (float)(max - min)) + min);
         }
+
         /// <summary>
         /// Generates a random double within the specified range [min, max).
         /// </summary>
-        /// <param name="min"></param>
-        /// <param name="max"></param>
-        /// <returns></returns>
         public double Range(double min, double max)
         {
             if (max <= min)
@@ -255,7 +223,7 @@ namespace ShadowLib.RNG.Sources
         }
 
         /// <summary>
-        /// Uniform ulong in [0, bound) with NO modulo bias (for big ranges).
+        /// Uniform ulong in [min, max) with NO modulo bias (for big ranges).
         /// </summary>
         public ulong Range(ulong min, ulong max)
         {
@@ -278,6 +246,113 @@ namespace ShadowLib.RNG.Sources
 
         private static uint RotL(uint x, int k)
             => (x << k) | (x >> (32 - k));
+    }
+
+    /// <summary>
+    /// xoshiro128** PRNG (Blackman and Vigna). Deterministic, fast, good statistical quality.
+    /// Not cryptographically secure.
+    ///
+    /// <see cref="IRandom"/> wrapper over <see cref="Xoshiro128"/>; both produce identical output for the same seed.
+    /// </summary>
+    public sealed class Xoshiro128StarStar : IRandom
+    {
+        private Xoshiro128 _core;
+
+        /// <summary>
+        /// Gets or sets the internal state of the generator as a Xoshiro128State struct. This allows for easy saving and restoring of the generator's state.
+        /// </summary>
+        public Xoshiro128State State
+        {
+            get => _core.State;
+            set => _core.State = value;
+        }
+
+        /// <summary>
+        /// Create with explicit 64-bit seed.
+        /// </summary>
+        public Xoshiro128StarStar(ulong seed)
+        {
+            _core = new Xoshiro128(seed);
+        }
+
+        /// <summary>
+        /// Create with high-entropy OS seed (non-deterministic).
+        /// </summary>
+        public Xoshiro128StarStar()
+        {
+            _core = new Xoshiro128(Utilities.Seeding.GenerateSeed64());
+        }
+
+        /// <summary>
+        /// Gets the current state of the RNG as a 16-byte array (four little-endian 32-bit unsigned integers).
+        /// </summary>
+        /// <returns>A byte array representing the current state of the RNG.</returns>
+        public byte[] GetState() => State.ToBytes();
+
+        /// <summary>
+        /// Sets the state of the RNG from a byte array in the format produced by <see cref="GetState"/>. Must be at least 16 bytes.
+        /// </summary>
+        /// <param name="state">A byte array representing the state to restore.</param>
+        public void SetState(byte[] state) => SetState(state.AsSpan());
+
+        /// <summary>
+        /// Sets the state of the RNG from a span of bytes in the format produced by <see cref="GetState"/>. Must be at least 16 bytes.
+        /// </summary>
+        /// <param name="state">A read-only span of bytes representing the state to restore.</param>
+        public void SetState(ReadOnlySpan<byte> state)
+        {
+            State = Xoshiro128State.FromBytes(state);
+        }
+
+        /// <summary>
+        /// Re-seed this generator deterministically.
+        /// </summary>
+        public void Seed(ulong seed) => _core.Seed(seed);
+
+        /// <summary>
+        /// Core next uint (32-bit).
+        /// </summary>
+        public uint NextUInt() => _core.NextUInt();
+
+        /// <summary>
+        /// Next signed int (full 32-bit range).
+        /// </summary>
+        public int NextInt() => _core.NextInt();
+
+        /// <summary>
+        /// Next ulong (64-bit) by combining two 32-bit outputs.
+        /// </summary>
+        public ulong NextULong() => _core.NextULong();
+
+        /// <summary>
+        /// Uniform float in [0,1).
+        /// </summary>
+        public float NextFloat() => _core.NextFloat();
+
+        /// <summary>
+        /// Uniform double in [0,1).
+        /// </summary>
+        public double NextDouble() => _core.NextDouble();
+
+        /// <summary>
+        /// Uniform int in [min, max) with NO modulo bias.
+        /// </summary>
+        public int Range(int min, int max) => _core.Range(min, max);
+
+        /// <summary>
+        /// Generates a random float within the specified range [min, max).
+        /// </summary>
+        public float Range(float min, float max) => _core.Range(min, max);
+
+        /// <summary>
+        /// Generates a random double within the specified range [min, max).
+        /// </summary>
+        public double Range(double min, double max) => _core.Range(min, max);
+
+        /// <summary>
+        /// Uniform ulong in [min, max) with NO modulo bias (for big ranges).
+        /// </summary>
+        public ulong Range(ulong min, ulong max) => _core.Range(min, max);
     }
 
     internal static class SplitMix64

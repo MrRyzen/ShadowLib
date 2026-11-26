@@ -146,6 +146,22 @@
                     return z == 0UL ? 1UL : z;
                 }
             }
+
+            /// <summary>
+            /// Deterministically derive a new 64-bit seed from a root seed + numeric index.
+            /// Arithmetic only (no strings, no allocation), so it is callable from Unity jobs and Burst.
+            /// Good for: one seed per job iteration, entity or chunk index.
+            /// </summary>
+            public static ulong DeriveSeed64(ulong rootSeed, ulong index)
+            {
+                unchecked
+                {
+                    ulong x = rootSeed;
+                    ulong y = Sources.SplitMix64.Next(ref x) + index;
+                    ulong z = Sources.SplitMix64.Next(ref y);
+                    return z == 0UL ? 1UL : z;
+                }
+            }
         #endregion
     }
 }

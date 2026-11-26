@@ -74,6 +74,57 @@ namespace ShadowLib.Tests
             Assert.AreEqual(reference.NextUInt(), actual.NextUInt());
         }
 
+        private static void AssertUnmanaged<T>() where T : unmanaged { }
+
+        [Test]
+        public void Xoshiro128Struct_IsUnmanaged() => AssertUnmanaged<Xoshiro128>();
+
+        [Test]
+        public void Xoshiro128Struct_MatchesClassBitForBit()
+        {
+            var s = new Xoshiro128(987654321UL);
+            var c = new Xoshiro128StarStar(987654321UL);
+            for (int i = 0; i < 200; i++)
+            {
+                Assert.AreEqual(c.NextUInt(), s.NextUInt());
+                Assert.AreEqual(c.NextInt(), s.NextInt());
+                Assert.AreEqual(c.NextULong(), s.NextULong());
+                Assert.AreEqual(c.NextFloat(), s.NextFloat());
+                Assert.AreEqual(c.NextDouble(), s.NextDouble());
+                Assert.AreEqual(c.Range(-5, 17), s.Range(-5, 17));
+                Assert.AreEqual(c.Range(0.5f, 9f), s.Range(0.5f, 9f));
+                Assert.AreEqual(c.Range(1.0, 2.0), s.Range(1.0, 2.0));
+                Assert.AreEqual(c.Range(3UL, 1UL << 40), s.Range(3UL, 1UL << 40));
+            }
+            CollectionAssert.AreEqual(c.GetState(), s.State.ToBytes());
+        }
+
+        [Test]
+        public void Xoshiro128Struct_ZeroSeedAndZeroState_StillGenerate()
+        {
+            Assert.AreNotEqual(0u, new Xoshiro128(0UL).NextUInt() | new Xoshiro128(0UL).State.S0);
+
+            var zeroed = new Xoshiro128(5UL) { State = default };
+            zeroed.NextUInt();
+            Assert.AreNotEqual(0u, zeroed.NextUInt() | zeroed.NextUInt());
+        }
+
+        [Test]
+        public void DeriveSeed64_ByIndex_IsStableDistinctAndNonZero()
+        {
+            Assert.AreEqual(Seeding.DeriveSeed64(42UL, 7UL), Seeding.DeriveSeed64(42UL, 7UL));
+
+            var seen = new HashSet<ulong>();
+            for (ulong i = 0; i < 10000; i++)
+            {
+                ulong seed = Seeding.DeriveSeed64(42UL, i);
+                Assert.AreNotEqual(0UL, seed);
+                Assert.IsTrue(seen.Add(seed));
+            }
+
+            Assert.AreNotEqual(Seeding.DeriveSeed64(42UL, 1UL), Seeding.DeriveSeed64(43UL, 1UL));
+        }
+
         [Test]
         public void DeterministicUUID_IsPinned()
         {
