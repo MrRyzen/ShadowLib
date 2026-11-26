@@ -118,7 +118,7 @@ public static class GridFlowField
 
 **Errors** (thrown; under Burst these abort in a player build like any other Burst exception, matching `Xoshiro128`'s range guards): `width` or `height` not positive, `costs.Length != width * height`, `start` / `goal` / any flow-field goal outside `0..cellCount-1`, scratch shorter than `ScratchLength`, `distances` or `directions` shorter than the cell count. An empty `goals` span is not an error: every cell becomes unreachable.
 
-**Flow field detail:** a multi-source Dijkstra outward from the goals. `distances[c]` is the cheapest cost of walking from `c` to any goal (entering costs as above); `directions[c]` is the first step of that walk. A walker stepping from `c` to neighbour `n` pays for entering `n`, so the outward search from the goals relaxes `distances[c] = distances[n] + step * costs[n]`; a goal cell's own cost is never paid. Direction codes 0–7 are a fixed, documented order (E, W, N, S, NE, NW, SE, SW; N is +Y to match `RandomWalk`'s "up"). Blocked goals are ignored.
+**Flow field detail:** a multi-source Dijkstra outward from the goals. `distances[c]` is the cheapest cost of walking from `c` to any goal (entering costs as above); `directions[c]` is the first step of that walk. A walker stepping from `c` to neighbour `n` pays for entering `n`, so the outward search from the goals relaxes `distances[c] = distances[n] + step * costs[n]`. Entering a goal is paid like any other step, so the numbers match A*; only the cell a walker starts on is free. Direction codes 0–7 are a fixed, documented order (E, W, N, S, NE, NW, SE, SW; N is +Y to match `RandomWalk`'s "up"). Blocked goals are ignored.
 
 ### Layer 2: the `Grid2D` wrapper (managed)
 
