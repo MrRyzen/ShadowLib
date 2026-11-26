@@ -24,8 +24,6 @@ namespace ShadowLib.RNG.Distributions
         {
             if (values.Length <= 0)
                 throw new ArgumentException("Number of sides must be positive.", nameof(values));
-            if (values.Length != values.Length)
-                throw new ArgumentException("Values array length must match the number of sides.", nameof(values));
             _rng = rng;
             _sides = values.Length;
             _values = values;

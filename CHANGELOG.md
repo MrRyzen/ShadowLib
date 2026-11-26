@@ -4,6 +4,18 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+### Changed
+
+- **Behavior change:** `Seeding.DeriveSeed(uint, string)` now hashes the context with FNV-1a instead of summing its characters, so contexts that are anagrams of each other (`"chunk/1/2"` vs `"chunk/2/1"`) no longer collide. Seeds derived with the 32-bit overload differ from earlier previews; `DeriveSeed64` (and therefore `Orchestrator`) is unchanged.
+- **Behavior change:** `BinPacker.AutoSort` breaks ties between equally sized shapes by input order. Previously the order of ties depended on the runtime's unstable sort, so layouts with many same-sized items may differ from earlier previews.
+- `RandomBag<T>.Sample` is O(1) instead of O(n); draw order is unchanged.
+- `UUID.GenerateDeterministicUUID` no longer allocates and is roughly 2.5x faster; output is unchanged on little-endian platforms and now identical on big-endian ones too.
+
+### Fixed
+
+- `ConditionEvaluator` matched custom function names with the current culture, so `CONTAINS(...)` / `DISTANCE(...)` evaluated to `false` under Turkish locales. Matching is now culture-invariant.
+- `ConditionEvaluator` no longer blocks NCalc's built-in functions (`Max`, `Round`, `Abs`, ...), which previously always evaluated to `false`.
+
 ## [0.1.0-preview.5] — 2026-07-25
 
 ### Added

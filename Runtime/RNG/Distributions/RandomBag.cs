@@ -18,6 +18,7 @@ namespace ShadowLib.RNG.Distributions
         private readonly List<T> _pool;
         private readonly List<T> _items;
         private readonly IRandom _rng;
+        private int _drawn;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="RandomBag{T}"/> class.
@@ -47,6 +48,8 @@ namespace ShadowLib.RNG.Distributions
         public void Add(T item, bool shuffleAfterAdd = true)
         {
             _pool.Add(item);
+            _items.RemoveRange(0, _drawn);
+            _drawn = 0;
             _items.Add(item);
             if (shuffleAfterAdd)
             {
@@ -63,12 +66,10 @@ namespace ShadowLib.RNG.Distributions
         public T Sample()
         {
             RefillIfNeeded();
-            if (_items.Count == 0)
+            if (Count == 0)
                 throw new System.InvalidOperationException("The bag is empty.");
 
-            T item = _items[0];
-            _items.RemoveAt(0);
-            return item;
+            return _items[_drawn++];
         }
 
         /// <summary>
@@ -79,10 +80,10 @@ namespace ShadowLib.RNG.Distributions
         public T Peek()
         {
             RefillIfNeeded();
-            if (_items.Count == 0)
+            if (Count == 0)
                 throw new System.InvalidOperationException("The bag is empty.");
 
-            return _items[0];
+            return _items[_drawn];
         }
 
         /// <summary>
@@ -92,24 +93,25 @@ namespace ShadowLib.RNG.Distributions
         public void Refill()
         {
             _items.Clear();
+            _drawn = 0;
             _items.AddRange(_pool);
             RandomUtils.Shuffle(_items, _rng);
         }
 
         private void RefillIfNeeded()
         {
-            if (AutoRefill && _items.Count == 0 && _pool.Count > 0)
+            if (AutoRefill && Count == 0 && _pool.Count > 0)
                 Refill();
         }
 
         /// <summary>
         /// Gets the number of items remaining in the current cycle.
         /// </summary>
-        public int Count => _items.Count;
+        public int Count => _items.Count - _drawn;
 
         /// <summary>
         /// Indicates whether another draw will succeed (remaining items in this cycle, or a refill is available).
         /// </summary>
-        public bool HasNext => _items.Count > 0 || (AutoRefill && _pool.Count > 0);
+        public bool HasNext => Count > 0 || (AutoRefill && _pool.Count > 0);
     }
 }

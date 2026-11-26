@@ -1,6 +1,7 @@
 namespace ShadowLib.RNG.Utilities
 {
     using System;
+    using System.Buffers.Binary;
     using System.Security.Cryptography;
 
     /// <summary>
@@ -31,52 +32,47 @@ namespace ShadowLib.RNG.Utilities
         /// <param name="context">Context value (e.g. RNG.NextULong()).</param>
         public static Guid GenerateDeterministicUUID(ulong seed, ulong context)
         {
-            // Convert inputs to raw bytes (no strings, no encoding ambiguity)
-            byte[] seedBytes = BitConverter.GetBytes(seed);
-            byte[] contextBytes = BitConverter.GetBytes(context);
+            // Hash input = namespace (network order) + seed + context, both little-endian on every platform.
+            Span<byte> input = stackalloc byte[32];
+            NamespaceNetworkOrder.CopyTo(input);
+            BinaryPrimitives.WriteUInt64LittleEndian(input.Slice(16, 8), seed);
+            BinaryPrimitives.WriteUInt64LittleEndian(input.Slice(24, 8), context);
 
-            byte[] nameBytes = new byte[seedBytes.Length + contextBytes.Length];
-            Buffer.BlockCopy(seedBytes, 0, nameBytes, 0, seedBytes.Length);
-            Buffer.BlockCopy(contextBytes, 0, nameBytes, seedBytes.Length, contextBytes.Length);
+            Span<byte> hash = stackalloc byte[20];
+            (_sha1 ??= SHA1.Create()).TryComputeHash(input, hash, out _);
 
-            // Namespace UUID → network byte order
-            byte[] namespaceBytes = ShadowLibNamespace.ToByteArray();
-            SwapGuidByteOrder(namespaceBytes);
-
-            // Hash(namespace + name)
-            using var sha1 = SHA1.Create();
-            byte[] hashInput = new byte[namespaceBytes.Length + nameBytes.Length];
-            Buffer.BlockCopy(namespaceBytes, 0, hashInput, 0, namespaceBytes.Length);
-            Buffer.BlockCopy(nameBytes, 0, hashInput, namespaceBytes.Length, nameBytes.Length);
-
-            byte[] hash = sha1.ComputeHash(hashInput);
-
-            // Build UUID from first 16 bytes
-            byte[] guidBytes = new byte[16];
-            Array.Copy(hash, guidBytes, 16);
-
+            Span<byte> guidBytes = hash.Slice(0, 16);
             // Set version (5)
             guidBytes[6] = (byte)((guidBytes[6] & 0x0F) | 0x50);
             // Set variant (RFC 4122)
             guidBytes[8] = (byte)((guidBytes[8] & 0x3F) | 0x80);
 
-            // Convert back to .NET Guid byte order
             SwapGuidByteOrder(guidBytes);
 
             return new Guid(guidBytes);
         }
 
+        [ThreadStatic]
+        private static SHA1? _sha1;
+
+        private static readonly byte[] NamespaceNetworkOrder = ToNetworkOrder(ShadowLibNamespace);
+
+        private static byte[] ToNetworkOrder(Guid guid)
+        {
+            byte[] bytes = guid.ToByteArray();
+            SwapGuidByteOrder(bytes);
+            return bytes;
+        }
+
         /// <summary>
         /// Swaps byte order between RFC 4122 network order and .NET Guid order.
         /// </summary>
-        private static void SwapGuidByteOrder(byte[] guid)
+        private static void SwapGuidByteOrder(Span<byte> guid)
         {
-            void Swap(int a, int b) => (guid[a], guid[b]) = (guid[b], guid[a]);
-
-            Swap(0, 3);
-            Swap(1, 2);
-            Swap(4, 5);
-            Swap(6, 7);
+            (guid[0], guid[3]) = (guid[3], guid[0]);
+            (guid[1], guid[2]) = (guid[2], guid[1]);
+            (guid[4], guid[5]) = (guid[5], guid[4]);
+            (guid[6], guid[7]) = (guid[7], guid[6]);
         }
     }
 }

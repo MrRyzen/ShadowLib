@@ -196,11 +196,16 @@ namespace ShadowLib.Procedural
             for (int i = 0; i < items.Count; i++)
                 _space.Free(items[i].item);
 
-            var sorted = new (TOccupant item, Polyomino shape)[items.Count];
+            var sorted = new (TOccupant item, Polyomino shape, int order)[items.Count];
             for (int i = 0; i < items.Count; i++)
-                sorted[i] = items[i];
+                sorted[i] = (items[i].item, items[i].shape, i);
 
-            Array.Sort(sorted, (a, b) => b.shape.CellCount.CompareTo(a.shape.CellCount));
+            // Array.Sort is unstable; the input-order tie-break keeps results identical across runtimes.
+            Array.Sort(sorted, (a, b) =>
+            {
+                int bySize = b.shape.CellCount.CompareTo(a.shape.CellCount);
+                return bySize != 0 ? bySize : a.order.CompareTo(b.order);
+            });
 
             var result = new List<(TOccupant item, int col, int row)>(sorted.Length);
             for (int i = 0; i < sorted.Length; i++)

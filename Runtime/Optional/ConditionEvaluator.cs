@@ -56,7 +56,7 @@ namespace ShadowLib.RNG.Modifiers
 
         private void HandleCustomFunction(string name, FunctionArgs args)
         {
-            switch (name.ToLower())
+            switch (name.ToLowerInvariant())
             {
                 case "contains":
                     EvaluateContains(args);
@@ -70,8 +70,7 @@ namespace ShadowLib.RNG.Modifiers
                     EvaluateCount(args);
                     break;
 
-                default:
-                    throw new ArgumentException($"Unknown function: {name}");
+                // Anything else is left without a result so NCalc falls back to its built-ins.
             }
         }
 

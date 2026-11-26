@@ -33,14 +33,12 @@ namespace ShadowLib.RNG.Distributions
 
         public T[] Sample(IRandom rng, int tier, int drops = 1)
         {
-            if (!_entries.ContainsKey(tier))
-                throw new ArgumentException($"Tier {tier} does not exist in the table.");
-
+            var table = GetTier(tier);
             var results = new T[drops];
 
             for (int i = 0; i < drops; i++)
             {
-                results[i] = _entries[tier].Sample(rng);
+                results[i] = table.Sample(rng);
             }
 
             return results;
@@ -48,10 +46,10 @@ namespace ShadowLib.RNG.Distributions
 
         public DynamicWeightTable<T> GetTier(int tier)
         {
-            if (!_entries.ContainsKey(tier))
+            if (!_entries.TryGetValue(tier, out var table))
                 throw new ArgumentException($"Tier {tier} does not exist in the table.");
 
-            return _entries[tier];
+            return table;
         }
 
         public int[] GetTiers()

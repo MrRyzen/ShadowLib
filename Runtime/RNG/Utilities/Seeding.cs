@@ -59,10 +59,15 @@
         {
             unchecked
             {
-                uint z = rootSeed;
+                // FNV-1a 32 over UTF-16 chars, so character order matters.
+                uint h = 2166136261u;
                 foreach (char c in context)
-                    z += c;
+                {
+                    h ^= c;
+                    h *= 16777619u;
+                }
 
+                uint z = rootSeed ^ h;
                 z += 0x9E3779B9;
                 z = (z ^ (z >> 16)) * 0x85EBCA6B;
                 z = (z ^ (z >> 13)) * 0xC2B2AE35;
