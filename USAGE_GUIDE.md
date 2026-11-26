@@ -586,6 +586,25 @@ var placed = packer.AutoSort(new (MyItem item, Polyomino shape)[] {
 
 `AutoSort` frees and repacks everything, returning the successfully placed items with their new positions — anything missing from the result did **not** fit.
 
+### `RandomWalk` — a seeded path over a grid
+
+```csharp
+using ShadowLib.Procedural;
+
+// A river crossing left to right: never steps back, drifts up and down.
+(int X, int Y)[] river = RandomWalk.Generate(rng, length: 40, width: 16, height: 5, start: (0, 2),
+    new DirectionBias(right: 0.6f, left: 0f, up: 0.2f, down: 0.2f));
+
+// A drunkard's walk for carving caves, written into your own buffer (no allocation).
+Span<(int X, int Y)> steps = stackalloc (int X, int Y)[256];
+int taken = RandomWalk.Generate(rng, steps, width: 32, height: 32, start: (16, 16), DirectionBias.Uniform);
+```
+
+- The first position is `start`; each next one is a single step right (+X), left (-X), up (+Y) or down (-Y).
+- A step that would leave the grid is never picked; the other directions keep their relative weights.
+- The walk ends early when no weighted direction is open (a right-only walk stops at the right edge), so check the array length or the returned count.
+- Cells can be visited more than once. One `rng.NextFloat()` per step taken.
+
 ### `MarkovWordGenerator` — character-level name generation
 
 For procedural naming (companies, products, people): trains an order-N character Markov chain on curated word lists, then generates new words that resemble — but don't copy — the training data.
@@ -742,7 +761,8 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `Xoshiro128` implementing `IRandom` — it does not; it is a plain struct. The `IRandom` implementation is `Xoshiro128StarStar`.
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate` / `Polycube.Generate` returning a `List` of positions — they return the `Polyomino` / `Polycube` struct. Their `max` limits are bounding-box sizes, not coordinates, and there is no per-axis bias parameter.
-- `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, A* / pathfinding on `Grid2D` — all roadmap-only. Do not write code that calls these.
+- `RandomWalk.Generate(rng, length, bounds: (w, h), bias: new DirectionBias(forward, up, down))` — that was the roadmap sketch. The real call takes `width`, `height`, `start` and a four-weight `DirectionBias(right, left, up, down)`; up is +Y. There is no self-avoiding or eight-direction walk.
+- `SpacedPlacement`, `CellularAutomata`, A* / pathfinding on `Grid2D` — all roadmap-only. Do not write code that calls these.
 - `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
 - `Polycube` / `Polyomino` rotation helpers, and `SpatialGraph3D` implementing `ISpace` or working with `BinPacker` — none of these exist.
 - `DynamicWeightTable<T>.AddWeight` / `MultiplyWeight` / `ResetWeights` / `UniformWeights` / `NormalizeWeights` / `GetBaseWeight` / `SetBaseWeight` — removed. Use `SetInfluence` for odds that change with game state, `SetEnabled(item, false)` to take an item out, `SetWeight` for a permanent change.

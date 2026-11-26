@@ -59,6 +59,7 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ### Procedural
 
 - **`BinPacker<TOccupant>`** — Polyomino bin packing on any `ISpace`. Strategies: FirstFit, BestFit (neighbor-contact scoring), BottomLeft. Includes `TryPlace`, `CanFit`, `AllFits`, and `AutoSort` (repack by decreasing size).
+- **`RandomWalk` + `DirectionBias`** — Seeded walk over a bounded grid, one orthogonal step at a time, with four direction weights. Steps that would leave the grid are never picked; the walk ends early if it has nowhere to go. Array and allocation-free `Span` forms. One RNG draw per step.
 - **`MarkovWordGenerator`** — Character-level order-N Markov word generation for procedural naming. `^`/`$` start/end markers, min/max length bounds, bounded retry, allocation-free `TryGenerate(Span<char>)`. Built on `MarkovChain<string>` k-gram states.
 
 ---
@@ -68,19 +69,6 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ### A* pathfinding on Grid2D
 
 Shortest path between two cells of a `Grid2D`, with caller-supplied walkability and step cost. No API designed yet. Requirements: no allocation per query, tuned for speed, and a core usable from Unity jobs / Burst / ECS (an unmanaged struct over caller-supplied buffers, since `Runtime/` cannot reference `Unity.Collections`). (Pathfinding was deliberately left out of `SpatialGraph3D`.)
-
-### Random Walk
-
-Biased directional walk with boundary clamping. Configurable step weights.
-
-```csharp
-var path = RandomWalk.Generate(rng,
-    length: 10,
-    bounds: (8, 6),
-    bias: new DirectionBias(forward: 0.6f, up: 0.2f, down: 0.2f));
-
-// Returns List<(int, int)> positions
-```
 
 ### Spaced Placement
 
@@ -129,7 +117,7 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 9 | `SpatialGraph3D` + `Polycube` (3D inventory that wears out, with pocket analysis) | `Polyomino` | Medium | **Done** |
 | 10 | A* pathfinding on `Grid2D` | `Grid2D` | Medium | Pending |
 | 11 | `Polyomino Generator` + `Polycube Generator` | `IRandom` | Low | **Done** |
-| 12 | `Random Walk` | `IRandom` | Low | Pending |
+| 12 | `Random Walk` | `IRandom` | Low | **Done** |
 | 13 | `Spaced Placement` | — | Low | Pending |
 | 14 | `Cellular Automata` | `FieldGrid` | Medium | Pending |
 | 15 | BSP, WFC, Maze Gen | — | High | Pending |

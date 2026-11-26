@@ -23,6 +23,7 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - `IEffect<TTarget>` and `EffectWheel<TEffect, TTarget>` with `SampleAndApply(rng, target)`.
 - `Polycube`: a 3D shape (`FromBox`, `FromOffsets`, `FromPolyomino`), the counterpart of `Polyomino`.
 - `Polyomino.Generate(rng, cellCount, compactness, maxWidth, maxHeight)` and `Polycube.Generate(rng, cellCount, compactness, maxWidth, maxHeight, maxDepth)`: seeded connected shapes, from sprawling to blocky, optionally capped to a bounding size.
+- `RandomWalk.Generate` and `DirectionBias`: a seeded walk over a bounded grid with four direction weights, as an array or written into a caller's `Span`.
 - `SpatialGraph3D<TOccupant>` is now a complete 3D inventory that wears out: `Polycube` items placed across layers, `TryKill` / `TryKillRandom(rng)` returning a `KilledCell<TOccupant>` and leaving the item in place, `Repair`, `FindPockets`, plus `Exists`, `IsAlive`, `IsOccupied`, `TryGetOccupant`, `Contains`, `GetCells`, `Volume`, `ExistingCount`, `AliveCount` and an optional occupant comparer.
 
 ### Removed

@@ -155,6 +155,18 @@ namespace ShadowLib.Runner
             crate.Place(0, 0, 0, "Lump", lump);
             Console.WriteLine($"\nGenerated polycube: {lump.CellCount} cells, {lump.Width}x{lump.Height}x{lump.Depth}, fits its 2x2x3 crate: {crate.Contains("Lump")}");
 
+            var river = RandomWalk.Generate(
+                orchestrator.CreateRNG("river"), length: 40, width: 16, height: 5, start: (0, 2),
+                new DirectionBias(right: 0.6f, left: 0f, up: 0.2f, down: 0.2f));
+            Console.WriteLine($"\nRandom walk, biased right ({river.Length} positions):");
+            for (int y = 4; y >= 0; y--)
+            {
+                var line = new char[16];
+                for (int x = 0; x < 16; x++)
+                    line[x] = Array.IndexOf(river, (x, y)) >= 0 ? '~' : '.';
+                Console.WriteLine($"  {new string(line)}");
+            }
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);
