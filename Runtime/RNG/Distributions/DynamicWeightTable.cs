@@ -30,8 +30,13 @@ namespace ShadowLib.RNG.Distributions
             public readonly bool HasStock => MaxUnits > 0;
         }
 
-        private readonly List<Entry> _entries;
+        private Entry[] _entries;
+        private int _count;
         private float[] _effective = Array.Empty<float>();
+        private float[] _plainWeights = Array.Empty<float>();
+        private float _plainTotal;
+        private bool _everyItemIsPlain;
+        private bool _plainCacheIsStale = true;
         private int _lastPicked = -1;
         private int _repeatExcluded = -1;
         private float _repeatExcludedWeight;
@@ -46,11 +51,11 @@ namespace ShadowLib.RNG.Distributions
         /// <param name="initialCapacity">Initial capacity of the item list.</param>
         public DynamicWeightTable(int initialCapacity = 16)
         {
-            _entries = new List<Entry>(initialCapacity);
+            _entries = new Entry[Math.Max(initialCapacity, 0)];
         }
 
         /// <summary>Gets the number of items in the table, pickable or not.</summary>
-        public int Count => _entries.Count;
+        public int Count => _count;
 
         /// <summary>Gets the sum of the effective weights a pick would use right now.</summary>
         public float TotalWeight => ComputeEffectiveWeights();
@@ -66,7 +71,11 @@ namespace ShadowLib.RNG.Distributions
             if (IndexOf(item) >= 0)
                 throw new ArgumentException("Item is already in the table.", nameof(item));
 
-            _entries.Add(new Entry { Item = item, Weight = weight, Enabled = true });
+            if (_count == _entries.Length)
+                Array.Resize(ref _entries, Math.Max(4, _count * 2));
+
+            _entries[_count++] = new Entry { Item = item, Weight = weight, Enabled = true };
+            _plainCacheIsStale = true;
         }
 
         /// <summary>Removes an item and everything configured for it.</summary>
@@ -76,7 +85,9 @@ namespace ShadowLib.RNG.Distributions
             int index = IndexOf(item);
             if (index < 0) return false;
 
-            _entries.RemoveAt(index);
+            Array.Copy(_entries, index + 1, _entries, index, _count - index - 1);
+            _entries[--_count] = default;
+            _plainCacheIsStale = true;
             if (index == _lastPicked) _lastPicked = -1;
             else if (index < _lastPicked) _lastPicked--;
             return true;
@@ -85,7 +96,9 @@ namespace ShadowLib.RNG.Distributions
         /// <summary>Removes every item.</summary>
         public void Clear()
         {
-            _entries.Clear();
+            Array.Clear(_entries, 0, _count);
+            _count = 0;
+            _plainCacheIsStale = true;
             _lastPicked = -1;
         }
 
@@ -155,6 +168,7 @@ namespace ShadowLib.RNG.Distributions
 
             entry.Weight = weight;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
@@ -191,6 +205,7 @@ namespace ShadowLib.RNG.Distributions
             entry.MinWeight = min;
             entry.MaxWeight = max;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
@@ -204,6 +219,7 @@ namespace ShadowLib.RNG.Distributions
             Entry entry = _entries[index];
             entry.InfluenceSource = null;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
@@ -217,6 +233,7 @@ namespace ShadowLib.RNG.Distributions
             Entry entry = _entries[index];
             entry.Enabled = enabled;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
@@ -257,6 +274,7 @@ namespace ShadowLib.RNG.Distributions
             entry.Units = units;
             entry.MaxUnits = maxUnits;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
@@ -271,6 +289,7 @@ namespace ShadowLib.RNG.Distributions
             entry.Units = 0;
             entry.MaxUnits = 0;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
@@ -294,18 +313,15 @@ namespace ShadowLib.RNG.Distributions
             Entry entry = _entries[index];
             entry.Units = entry.MaxUnits;
             _entries[index] = entry;
+            _plainCacheIsStale = true;
             return true;
         }
 
         /// <summary>Restores every stocked item to full.</summary>
         public void RefillAll()
         {
-            for (int i = 0; i < _entries.Count; i++)
-            {
-                Entry entry = _entries[i];
-                entry.Units = entry.MaxUnits;
-                _entries[i] = entry;
-            }
+            for (int i = 0; i < _count; i++)
+                _entries[i].Units = _entries[i].MaxUnits;
         }
 
         /// <summary>Gets the chance, from 0 to 1, that the next <see cref="Sample"/> returns the item.</summary>
@@ -337,6 +353,9 @@ namespace ShadowLib.RNG.Distributions
         {
             if (rng == null) throw new ArgumentNullException(nameof(rng));
 
+            if (!PreventRepeat && EveryItemIsPlain())
+                return TrySamplePlain(rng, out item);
+
             float total = ComputeEffectiveWeights();
             if (total <= 0f)
             {
@@ -347,6 +366,56 @@ namespace ShadowLib.RNG.Distributions
             int index = PickIndex(rng, total);
             item = _entries[index].Item;
             CommitPick(index);
+            return true;
+        }
+
+        private bool EveryItemIsPlain()
+        {
+            if (!_plainCacheIsStale)
+                return _everyItemIsPlain;
+
+            if (_plainWeights.Length < _count)
+                _plainWeights = new float[_entries.Length];
+
+            _everyItemIsPlain = true;
+            _plainTotal = 0f;
+            for (int i = 0; i < _count; i++)
+            {
+                ref readonly Entry entry = ref _entries[i];
+                _everyItemIsPlain &= entry.Enabled && entry.InfluenceSource == null && !entry.HasStock;
+                _plainWeights[i] = entry.Weight;
+                _plainTotal += entry.Weight;
+            }
+
+            _plainCacheIsStale = false;
+            return _everyItemIsPlain;
+        }
+
+        private bool TrySamplePlain(IRandom rng, out T item)
+        {
+            if (float.IsInfinity(_plainTotal))
+                throw new OverflowException("The total weight overflowed; use smaller weights.");
+            if (_count == 0)
+            {
+                item = default!;
+                return false;
+            }
+
+            float target = rng.NextFloat() * _plainTotal;
+            float running = 0f;
+            int index = _count - 1;
+            for (int i = 0; i < _count; i++)
+            {
+                running += _plainWeights[i];
+                if (running >= target)
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            item = _entries[index].Item;
+            _lastPicked = index;
             return true;
         }
 
@@ -382,20 +451,17 @@ namespace ShadowLib.RNG.Distributions
         private void CommitPick(int index)
         {
             _lastPicked = index;
-            Entry entry = _entries[index];
-            if (!entry.HasStock) return;
-
-            entry.Units--;
-            _entries[index] = entry;
+            if (_entries[index].HasStock)
+                _entries[index].Units--;
         }
 
         private float ComputeEffectiveWeights()
         {
-            if (_effective.Length < _entries.Count)
-                _effective = new float[_entries.Count];
+            if (_effective.Length < _count)
+                _effective = new float[_entries.Length];
 
-            for (int i = 0; i < _entries.Count; i++)
-                _effective[i] = EffectiveWeight(_entries[i]);
+            for (int i = 0; i < _count; i++)
+                _effective[i] = EffectiveWeight(in _entries[i]);
 
             _repeatExcluded = -1;
             if (PreventRepeat && _lastPicked >= 0 && AnyPickableExcept(_lastPicked))
@@ -413,7 +479,7 @@ namespace ShadowLib.RNG.Distributions
 
         private bool AnyPickableExcept(int excluded)
         {
-            for (int i = 0; i < _entries.Count; i++)
+            for (int i = 0; i < _count; i++)
             {
                 if (i != excluded && _effective[i] > 0f)
                     return true;
@@ -424,7 +490,7 @@ namespace ShadowLib.RNG.Distributions
         private float SumEffectiveWeights()
         {
             float total = 0f;
-            for (int i = 0; i < _entries.Count; i++)
+            for (int i = 0; i < _count; i++)
                 total += _effective[i];
             return total;
         }
@@ -454,7 +520,7 @@ namespace ShadowLib.RNG.Distributions
             float target = rng.NextFloat() * total;
             float running = 0f;
             int lastPickable = -1;
-            for (int i = 0; i < _entries.Count; i++)
+            for (int i = 0; i < _count; i++)
             {
                 if (_effective[i] <= 0f) continue;
 
@@ -467,7 +533,7 @@ namespace ShadowLib.RNG.Distributions
 
         private int IndexOf(T item)
         {
-            for (int i = 0; i < _entries.Count; i++)
+            for (int i = 0; i < _count; i++)
             {
                 if (_entries[i].Item.Equals(item))
                     return i;

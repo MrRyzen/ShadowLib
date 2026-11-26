@@ -105,6 +105,108 @@ namespace ShadowLib.Tests
         }
 
         [Test]
+        public void Sample_PlainTableFastPath_PicksExactlyLikeTheGeneralPath()
+        {
+            for (ulong seed = 1; seed <= 40; seed++)
+            {
+                var shape = new Xoshiro128StarStar(seed);
+                var plain = new DynamicWeightTable<int>(initialCapacity: 0);
+                var general = new DynamicWeightTable<int>();
+                int items = shape.Range(1, 40);
+                for (int i = 0; i < items; i++)
+                {
+                    float weight = 0.01f + shape.NextFloat() * 50f;
+                    plain.Add(i, weight);
+                    general.Add(i, weight);
+                }
+                general.SetStock(0, int.MaxValue);
+
+                var plainRng = new Xoshiro128StarStar(seed + 1000);
+                var generalRng = new Xoshiro128StarStar(seed + 1000);
+                for (int pick = 0; pick < 500; pick++)
+                    Assert.AreEqual(general.Sample(generalRng), plain.Sample(plainRng), $"seed {seed}, pick {pick}");
+
+                Assert.AreEqual(generalRng.NextUInt(), plainRng.NextUInt(), $"seed {seed}: draw counts differ");
+            }
+        }
+
+        [Test]
+        public void Sample_AfterEveryKindOfChange_NeverUsesStaleWeights()
+        {
+            var rng = new Xoshiro128StarStar(5UL);
+            var table = new DynamicWeightTable<string>();
+            table.Add("A", 1f);
+            table.Add("B", 1f);
+            for (int i = 0; i < 50; i++) table.Sample(rng);
+
+            table.SetEnabled("A", false);
+            for (int i = 0; i < 50; i++) Assert.AreEqual("B", table.Sample(rng), "disabled item was picked");
+
+            table.SetEnabled("A", true);
+            table.SetWeight("B", 1e-20f);
+            table.SetWeight("A", 1e20f);
+            for (int i = 0; i < 50; i++) Assert.AreEqual("A", table.Sample(rng), "old weights were used");
+
+            table.Add("C", 1e30f);
+            for (int i = 0; i < 50; i++) Assert.AreEqual("C", table.Sample(rng), "added item was ignored");
+
+            Assert.IsTrue(table.TryRemove("C"));
+            for (int i = 0; i < 50; i++) Assert.AreEqual("A", table.Sample(rng), "removed item was picked");
+
+            table.SetStock("A", 2);
+            Assert.AreEqual("A", table.Sample(rng));
+            Assert.AreEqual("A", table.Sample(rng));
+            Assert.AreEqual("B", table.Sample(rng), "stock was ignored");
+
+            table.ClearStock("A");
+            float lean = -1f;
+            table.SetInfluence("A", 0f, 1e20f, () => lean);
+            Assert.AreEqual("B", table.Sample(rng), "influence was ignored");
+            table.ClearInfluence("A");
+            Assert.AreEqual("A", table.Sample(rng), "cleared influence still applied");
+
+            table.Clear();
+            Assert.IsFalse(table.TrySample(rng, out _));
+            table.Add("Z", 3f);
+            Assert.AreEqual("Z", table.Sample(rng));
+        }
+
+        [Test]
+        public void Sample_PlainTable_TurningPreventRepeatOnAndOff_TakesEffectImmediately()
+        {
+            var rng = new Xoshiro128StarStar(5UL);
+            var table = new DynamicWeightTable<string>();
+            table.Add("A", 1e20f);
+            table.Add("B", 1f);
+            Assert.AreEqual("A", table.Sample(rng));
+
+            table.PreventRepeat = true;
+            Assert.AreEqual("B", table.Sample(rng));
+            Assert.AreEqual("A", table.Sample(rng));
+
+            table.PreventRepeat = false;
+            Assert.AreEqual("A", table.Sample(rng));
+            Assert.IsTrue(table.TryGetLastPicked(out string last));
+            Assert.AreEqual("A", last);
+        }
+
+        [Test]
+        public void Sample_DrawLandingExactlyOnABoundary_GoesToTheEarlierItem_OnBothPaths()
+        {
+            var half = new FixedRandom(0.5f);
+            var plain = new DynamicWeightTable<string>();
+            plain.Add("A", 1f);
+            plain.Add("B", 1f);
+            var general = new DynamicWeightTable<string>();
+            general.Add("A", 1f);
+            general.Add("B", 1f);
+            general.SetStock("B", int.MaxValue);
+
+            Assert.AreEqual("A", plain.Sample(half));
+            Assert.AreEqual("A", general.Sample(half));
+        }
+
+        [Test]
         public void Sample_PlainTable_SequenceIsPinned()
         {
             var table = PlainTable();
