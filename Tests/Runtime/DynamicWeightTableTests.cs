@@ -161,5 +161,89 @@ namespace ShadowLib.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => t.SetWeight("B", 4f));
             Assert.IsTrue(t.SetWeight("B", 3f));
         }
+
+        [Test]
+        public void Stock_RunsOut_ThenRefills()
+        {
+            var t = new DynamicWeightTable<string>();
+            t.Add("relic", 1f);
+            t.SetStock("relic", 2);
+            var rng = new Xoshiro128StarStar(123UL);
+            Assert.AreEqual("relic", t.Sample(rng));
+            Assert.AreEqual("relic", t.Sample(rng));
+            Assert.IsTrue(t.TryGetStock("relic", out int left));
+            Assert.AreEqual(0, left);
+            Assert.IsFalse(t.TrySample(rng, out _));
+            Assert.IsTrue(t.Refill("relic"));
+            Assert.AreEqual("relic", t.Sample(rng));
+        }
+
+        [Test]
+        public void Stock_DepletedItem_LeavesTheRestPickable()
+        {
+            var t = PlainTable();
+            t.SetStock("D", 1);
+            var rng = new Xoshiro128StarStar(123UL);
+            int dCount = 0;
+            for (int i = 0; i < 1000; i++) if (t.Sample(rng) == "D") dCount++;
+            Assert.AreEqual(1, dCount);
+            Assert.AreEqual(0f, t.GetProbability("D"));
+        }
+
+        [Test]
+        public void Stock_RestoreAfterLoad_AndValidation()
+        {
+            var t = PlainTable();
+            Assert.IsTrue(t.SetStock("A", 1, 5));
+            Assert.IsTrue(t.TryGetStock("A", out int units));
+            Assert.AreEqual(1, units);
+            t.RefillAll();
+            t.TryGetStock("A", out units);
+            Assert.AreEqual(5, units);
+            Assert.IsFalse(t.TryGetStock("B", out _));
+            Assert.IsFalse(t.Refill("B"));
+            Assert.IsFalse(t.SetStock("Z", 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetStock("A", 6, 5));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetStock("A", -1, 5));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetStock("A", 0, 0));
+            Assert.IsTrue(t.ClearStock("A"));
+            Assert.IsFalse(t.TryGetStock("A", out _));
+        }
+
+        [Test]
+        public void ThrowingSource_LeavesTableUntouched()
+        {
+            var t = PlainTable();
+            foreach (var s in Letters) t.SetStock(s, 3);
+            bool explode = true;
+            t.SetInfluence("D", 1f, 8f, () => explode ? throw new InvalidOperationException("boom") : 0f);
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+
+            Assert.Throws<InvalidOperationException>(() => t.Sample(rng));
+            foreach (var s in Letters)
+            {
+                t.TryGetStock(s, out int units);
+                Assert.AreEqual(3, units);
+            }
+            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+        }
+
+        [Test]
+        public void Remove_KeepsNeighbourSettingsOnTheRightItems()
+        {
+            var t = PlainTable();
+            t.SetEnabled("A", false);
+            t.SetStock("C", 2, 7);
+            t.SetInfluence("D", 0f, 40f, () => 1f);
+            Assert.IsTrue(t.TryRemove("B"));
+
+            Assert.IsFalse(t.IsEnabled("A"));
+            Assert.IsTrue(t.IsEnabled("C"));
+            Assert.IsTrue(t.TryGetStock("C", out int units));
+            Assert.AreEqual(2, units);
+            Assert.IsFalse(t.TryGetStock("D", out _));
+            Assert.AreEqual(43f, t.TotalWeight);
+        }
     }
 }

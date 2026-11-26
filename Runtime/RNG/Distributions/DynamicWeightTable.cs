@@ -23,6 +23,10 @@ namespace ShadowLib.RNG.Distributions
             public Func<float>? InfluenceSource;
             public float MinWeight;
             public float MaxWeight;
+            public int Units;
+            public int MaxUnits;
+
+            public readonly bool HasStock => MaxUnits > 0;
         }
 
         private readonly List<Entry> _entries;
@@ -180,6 +184,82 @@ namespace ShadowLib.RNG.Distributions
             return index >= 0 && _entries[index].Enabled;
         }
 
+        /// <summary>Gives an item a limited stock, full at <paramref name="units"/>. Each pick spends one unit; at zero the item is unpickable.</summary>
+        /// <returns>True if the item was found.</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="units"/> is less than one.</exception>
+        public bool SetStock(T item, int units) => SetStock(item, units, units);
+
+        /// <summary>Gives an item a limited stock with separate current and full amounts, for restoring saved state.</summary>
+        /// <param name="item">The item to stock.</param>
+        /// <param name="units">Units left now.</param>
+        /// <param name="maxUnits">Units after a refill.</param>
+        /// <returns>True if the item was found.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">Breaks maxUnits &gt;= 1 or 0 &lt;= units &lt;= maxUnits.</exception>
+        public bool SetStock(T item, int units, int maxUnits)
+        {
+            if (maxUnits < 1)
+                throw new ArgumentOutOfRangeException(nameof(maxUnits), "Max units must be at least one.");
+            if (units < 0 || units > maxUnits)
+                throw new ArgumentOutOfRangeException(nameof(units), "Units must be between zero and max units.");
+
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            Entry entry = _entries[index];
+            entry.Units = units;
+            entry.MaxUnits = maxUnits;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>Makes an item's stock unlimited again.</summary>
+        /// <returns>True if the item was found.</returns>
+        public bool ClearStock(T item)
+        {
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            Entry entry = _entries[index];
+            entry.Units = 0;
+            entry.MaxUnits = 0;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>Gets the units an item has left.</summary>
+        /// <returns>False if the item is missing or its stock is unlimited.</returns>
+        public bool TryGetStock(T item, out int units)
+        {
+            int index = IndexOf(item);
+            bool hasStock = index >= 0 && _entries[index].HasStock;
+            units = hasStock ? _entries[index].Units : 0;
+            return hasStock;
+        }
+
+        /// <summary>Restores an item's stock to full.</summary>
+        /// <returns>False if the item is missing or its stock is unlimited.</returns>
+        public bool Refill(T item)
+        {
+            int index = IndexOf(item);
+            if (index < 0 || !_entries[index].HasStock) return false;
+
+            Entry entry = _entries[index];
+            entry.Units = entry.MaxUnits;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>Restores every stocked item to full.</summary>
+        public void RefillAll()
+        {
+            for (int i = 0; i < _entries.Count; i++)
+            {
+                Entry entry = _entries[i];
+                entry.Units = entry.MaxUnits;
+                _entries[i] = entry;
+            }
+        }
+
         /// <summary>Gets the chance, from 0 to 1, that the next <see cref="Sample"/> returns the item.</summary>
         /// <returns>The probability, or 0 if the item is missing or nothing is pickable.</returns>
         public float GetProbability(T item)
@@ -216,8 +296,19 @@ namespace ShadowLib.RNG.Distributions
                 return false;
             }
 
-            item = _entries[PickIndex(rng, total)].Item;
+            int index = PickIndex(rng, total);
+            item = _entries[index].Item;
+            CommitPick(index);
             return true;
+        }
+
+        private void CommitPick(int index)
+        {
+            Entry entry = _entries[index];
+            if (!entry.HasStock) return;
+
+            entry.Units--;
+            _entries[index] = entry;
         }
 
         private float ComputeEffectiveWeights()
@@ -237,7 +328,7 @@ namespace ShadowLib.RNG.Distributions
 
         private static float EffectiveWeight(in Entry entry)
         {
-            if (!entry.Enabled) return 0f;
+            if (!entry.Enabled || (entry.HasStock && entry.Units == 0)) return 0f;
             if (entry.InfluenceSource == null) return entry.Weight;
 
             float influence = entry.InfluenceSource();
