@@ -66,6 +66,8 @@ namespace ShadowLib.Procedural
             if (iterations < 0)
                 throw new ArgumentOutOfRangeException(nameof(iterations), iterations, "Iterations must not be negative.");
 
+            int width = grid.Width;
+            int height = grid.Height;
             var cells = grid.AsSpan();
             if (_previous.Length < cells.Length)
                 _previous = new bool[cells.Length];
@@ -74,16 +76,29 @@ namespace ShadowLib.Procedural
             for (int iteration = 0; iteration < iterations; iteration++)
             {
                 cells.CopyTo(previous);
-                for (int y = 0; y < grid.Height; y++)
+                for (int y = 0; y < height; y++)
                 {
-                    for (int x = 0; x < grid.Width; x++)
+                    bool borderRow = y == 0 || y == height - 1;
+                    for (int x = 0; x < width; x++)
                     {
-                        int index = y * grid.Width + x;
+                        int index = y * width + x;
                         int rule = previous[index] ? _surviveRule : _birthRule;
-                        cells[index] = LivingNeighbours(previous, grid.Width, grid.Height, x, y) >= rule;
+                        int living = borderRow || x == 0 || x == width - 1
+                            ? LivingNeighbours(previous, width, height, x, y)
+                            : InteriorLivingNeighbours(previous, width, index);
+                        cells[index] = living >= rule;
                     }
                 }
             }
+        }
+
+        private static int InteriorLivingNeighbours(ReadOnlySpan<bool> cells, int width, int index)
+        {
+            var above = cells.Slice(index - width - 1, 3);
+            var below = cells.Slice(index + width - 1, 3);
+            return (above[0] ? 1 : 0) + (above[1] ? 1 : 0) + (above[2] ? 1 : 0)
+                + (cells[index - 1] ? 1 : 0) + (cells[index + 1] ? 1 : 0)
+                + (below[0] ? 1 : 0) + (below[1] ? 1 : 0) + (below[2] ? 1 : 0);
         }
 
         private int LivingNeighbours(ReadOnlySpan<bool> cells, int width, int height, int x, int y)

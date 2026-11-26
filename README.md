@@ -1,6 +1,6 @@
 # ShadowLib
 
-> **Pre-release — `0.1.0-preview.5`.** Public API may break before `1.0.0`. Pin a specific Git tag or version when consuming.
+> **Version `0.1.0`, the first release.** It is still pre-1.0: a minor version may break public API, and `CHANGELOG.md` will say so. Pin a Git tag or version when consuming.
 
 ShadowLib is a deterministic-RNG and procedural-generation toolkit for games. It is plain C# targeting **`netstandard2.1`** — usable in Unity (2021.3 LTS+) and in any non-Unity .NET project.
 
@@ -29,7 +29,7 @@ https://github.com/MrRyzen/ShadowLib.git
 To pin a release:
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.5
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0
 ```
 
 ### 2. Unity — Local package path
@@ -57,7 +57,7 @@ Then in `Packages/manifest.json`:
 ### 4. .NET / NuGet
 
 ```bash
-dotnet add package ShadowLib --prerelease
+dotnet add package ShadowLib
 ```
 
 ---
@@ -100,7 +100,8 @@ For more, see [`USAGE_GUIDE.md`](./USAGE_GUIDE.md).
 | Target | Status |
 |---|---|
 | `.NET Standard 2.1`        | Library TFM (Unity baseline since 2021.3 LTS). |
-| Unity `2021.3` LTS – `6000` | Verified UPM compatibility. |
+| Unity `6000.6`              | Compiled and tested: editor, plus built Windows and Linux players on Mono and IL2CPP. |
+| Unity `2021.3` LTS and later | Declared minimum (`package.json`). Not yet compiled on anything older than Unity 6. |
 | `.NET 6 / 7 / 8 / 9`        | Consume via NuGet or DLL. |
 | C# 9.0+                     | Required by language features used in source. |
 
@@ -177,7 +178,7 @@ CI (`.github/workflows/ci.yml`) runs build+test on every push/PR. Release (`.git
 - To cut a release:
   1. Update `package.json` `version` and `Runtime/ShadowLib.csproj` `<Version>`.
   2. Update `CHANGELOG.md`.
-  3. Tag: `git tag v0.2.0-preview.1 && git push --tags`.
+  3. Tag: `git tag v0.2.0 && git push --tags`.
   4. The release workflow builds DLL, NuGet `.nupkg`, and UPM `.tgz`, attaches them to the GitHub release.
 
 ---
@@ -189,9 +190,9 @@ CI (`.github/workflows/ci.yml`) runs build+test on every push/PR. Release (`.git
   1. NCalc available in the project (NuGetForUnity is the easy path).
   2. The scripting define `SHADOWLIB_NCALC` set in `Project Settings → Player → Scripting Define Symbols`.
   Without these, the optional module is silently excluded from compilation. The core RNG/Spatial/Procedural modules work without any of this.
-- **Burst compatibility is checked by hand, not by CI.** `Xoshiro128` was verified under Burst 2.0.0 (Unity 6000.6) to match managed output bit for bit in the default and `Deterministic` float modes. Under `FloatMode.Fast`, `Range(float, float)` and `Range(double, double)` drift in the low bits; integer draws stay exact. IL2CPP player builds are unchecked. See the usage guide.
+- **Burst compatibility is checked by hand, not by CI.** `Xoshiro128` was verified under Burst 2.0.0 (Unity 6000.6) to match managed output bit for bit in the default and `Deterministic` float modes. Under `FloatMode.Fast`, `Range(float, float)` and `Range(double, double)` drift in the low bits; integer draws stay exact. Built Windows and Linux players on Mono and IL2CPP gave the same results as .NET in a cross-runtime comparison (x64 only; nothing has run on ARM). See the usage guide.
 - **Roadmap items not yet implemented**: see [`SHADOWLIB_ROADMAP.md`](./SHADOWLIB_ROADMAP.md). BSP/WFC/Maze gen are deferred until needed.
-- **`CanOccupyCell` is O(w·h)** for region checks — fine for typical inventory grids, slow for huge worlds with large footprints. A bitmask-based fast path is on the roadmap.
+- **`Grid2D.CanOccupy` is O(cells in the shape)** — fine for typical inventory grids, slow for huge worlds with large footprints. A bitmask-based fast path is on the roadmap.
 
 ---
 

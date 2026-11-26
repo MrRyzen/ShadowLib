@@ -306,7 +306,7 @@ namespace ShadowLib.Runner
 
     public struct Item : IEquatable<Item>
     {
-        public string Name { get; }
+        public string Name { get; } = "";
         public int Value { get; }
 
         public int Width { get; } = 1;
@@ -357,12 +357,12 @@ namespace ShadowLib.Runner
     {
         public int X { get; private set; }
         public int Y { get; private set; }
-        public TOccupant Occupant { get; set; }
+        public TOccupant Occupant { get; set; } = default!;
         public bool IsOccupied { get; private set; }
 
         public Cell()
         {
-            Occupant = default(TOccupant);
+            Occupant = default!;
         }
 
         public void Initialize(int x, int y)
@@ -375,7 +375,7 @@ namespace ShadowLib.Runner
 
         public void Clear()
         {
-            Occupant = default(TOccupant);
+            Occupant = default!;
             IsOccupied = false;
         }
 

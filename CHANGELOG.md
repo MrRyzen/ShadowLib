@@ -4,6 +4,10 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-11-26
+
+The first release. Everything below is relative to `0.1.0-preview.5`.
+
 ### Added
 
 - `Orchestrator.Derive(context)`: a throwaway generator that yields the same stream on every call for a context. Nothing is stored.
@@ -32,7 +36,7 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 ### Removed
 
 - **Breaking:** `DynamicWeightTable<T>.AddWeight`, `MultiplyWeight`, `ResetWeights`, `UniformWeights`, `NormalizeWeights`, `GetBaseWeight`, `TryGetBaseWeight` and `SetBaseWeight`, along with the base/dynamic weight split. For odds that change with game state use `SetInfluence`; to take an item out use `SetEnabled(item, false)` or `TryRemove`; for a permanent change use `SetWeight`.
-- **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` (namespace `ShadowLib.RNG.Modifiers`). Nothing in the library applied them. `ConditionEvaluator` stays and can drive an influence source. The library no longer uses `System.Text.Json`.
+- **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` Nothing in the library applied them. `ConditionEvaluator` stays, still in the `ShadowLib.RNG.Modifiers` namespace, and can drive an influence source. The library no longer uses `System.Text.Json`.
 - **Breaking:** `SparseGraph<TOccupant>`. It was untested scaffolding with no users; `SpatialGraph3D` no longer sits on top of it.
 - **Breaking:** from `SpatialGraph3D<TOccupant>`: the `Graph` property, `AddNode` (now `AddCell`), `NodeExists` (now `Exists`), `ConnectAdjacent` and `ConnectLayers` (touching cells are always neighbours), the `initialCapacity` constructor parameter, and the `Polyomino` overloads of `AddPocket` / `CanPlace` / `Place` (pass `Polycube.FromPolyomino(shape)`). `AddPocket` now throws when the shape leaves the box instead of clipping it, and `Free` returns whether the item was placed.
 - **Breaking:** static `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(context)`. Replace with `var orchestrator = new Orchestrator(seed);` and `orchestrator.CreateRNG(context)`. Streams from `CreateRNG` are unchanged for the same root seed and context.
@@ -49,18 +53,18 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - **Behavior change:** `DynamicWeightTable<T>.Add` and `SetWeight` reject `NaN` and infinite weights with `ArgumentOutOfRangeException`, and picking throws `OverflowException` if the weights sum past `float.MaxValue` (it used to pick lopsidedly).
 - `DynamicWeightTable<T>` picks with an O(n) pass instead of a cached binary search, because influence is read at pick time. A table that uses influence, stock, disabled items or repeat prevention recomputes effective weights on every `Sample`, `TotalWeight` and `GetProbability` call; a plain table reuses cached weights until it is changed. For large fixed tables sampled in a hot loop, use `AliasTable<T>`.
 - `TieredTable<T>.AddTier` leaves an existing tier untouched if the new items are rejected.
-
 - **Behavior change:** `Seeding.DeriveSeed(uint, string)` now hashes the context with FNV-1a instead of summing its characters, so contexts that are anagrams of each other (`"chunk/1/2"` vs `"chunk/2/1"`) no longer collide. Seeds derived with the 32-bit overload differ from earlier previews; `DeriveSeed64` (and therefore `Orchestrator`) is unchanged.
 - **Behavior change:** `BinPacker.AutoSort` breaks ties between equally sized shapes by input order. Previously the order of ties depended on the runtime's unstable sort, so layouts with many same-sized items may differ from earlier previews.
 - `Grid2D.GetCellsForOccupant` returns indices in ascending order (and keeps the lowest ones when the buffer is too small) instead of exposing `HashSet` enumeration order.
 - Float math in `Range(float, float)`, `SimplexNoise`, `ScalingCurve`, `RandomUtils.Chance` and the alias-table builds is pinned to single precision with explicit casts, so results match on runtimes that evaluate `float` expressions in double (Mono without `float32`). Output on .NET is unchanged.
 - `RandomBag<T>.Sample` is O(1) instead of O(n); draw order is unchanged.
 - `UUID.GenerateDeterministicUUID` no longer allocates and is roughly 2.5x faster; output is unchanged on little-endian platforms and now identical on big-endian ones too.
+- `Grid2D.Occupy` and `Free` look the occupant up once instead of once per cell (.NET 8, one desktop machine: placing and freeing a 4x4 item went from about 530 ns to 240 ns). `Free` no longer uses stack memory in proportion to the item's footprint.
 
 ### Fixed
 
-- **Behaviour change:** `ScalingCurve.Exponential` now gives the same bits on every platform. It used `MathF.Pow`, whose last bit differs between Windows and Linux; it now multiplies in a fixed order in double precision and matches the exact power to float accuracy. Existing values can move by one float step on every platform: about 1 value in 6,000 on Windows over rates 0.001 to 2 and levels -20 to 200 (for example `Exponential(1f, 0.1f).Evaluate(56)` was 207.96532 and is now 207.9653). Results that used to round to zero can now be the smallest positive float, and levels beyond about 16 million, which the old code rounded, are now exact (which can also flip the sign for a negative base).
-- **Behaviour change:** `ScalingCurve.Logarithmic` no longer calls `MathF.Log` either; it computes the natural log with add, multiply and divide in a fixed order, so every platform gives the same bits. Existing values can move by one float step: about 1 value in 13,000 on Windows for levels up to 3 million (the first is level 1578 of `Logarithmic(0f, 1f)`), and about 1 in 100, by up to two steps, for levels above 16.7 million, which the old code rounded before taking the log. In every level swept the new result equals the double-precision log rounded to float.
+- **Behavior change:** `ScalingCurve.Exponential` now gives the same bits on every platform. It used `MathF.Pow`, whose last bit differs between Windows and Linux; it now multiplies in a fixed order in double precision and matches the exact power to float accuracy. Existing values can move by one float step on every platform: about 1 value in 6,000 on Windows over rates 0.001 to 2 and levels -20 to 200 (for example `Exponential(1f, 0.1f).Evaluate(56)` was 207.96532 and is now 207.9653). Results that used to round to zero can now be the smallest positive float, and levels beyond about 16 million, which the old code rounded, are now exact (which can also flip the sign for a negative base).
+- **Behavior change:** `ScalingCurve.Logarithmic` no longer calls `MathF.Log` either; it computes the natural log with add, multiply and divide in a fixed order, so every platform gives the same bits. Existing values can move by one float step: about 1 value in 13,000 on Windows for levels up to 3 million (the first is level 1578 of `Logarithmic(0f, 1f)`), and about 1 in 100, by up to two steps, for levels above 16.7 million, which the old code rounded before taking the log. In every level swept the new result equals the double-precision log rounded to float.
 - `DynamicWeightTable<T>.Sample` is several times faster: a table with no influence, stock, disabled items or repeat prevention now picks in a single pass over cached weights (Unity 6000.6 editor, Mono, one desktop machine: about 210 ns to 48 ns per pick from 10 items), and the other cases no longer copy entries. Pick sequences are unchanged.
 - `NextFloat` and `NextDouble` are faster on Mono (same setup: `NextFloat` about 7.3 ns to 4.9 ns). Same output bits.
 - `ConditionEvaluator` matched custom function names with the current culture, so `CONTAINS(...)` / `DISTANCE(...)` evaluated to `false` under Turkish locales. Matching is now culture-invariant.
@@ -149,7 +153,8 @@ Initial pre-release. Repository restructured for Unity UPM consumption alongside
 - `XorShift128` does not fully implement `IRandom` (legacy).
 - Roadmap items not yet implemented: `EffectWheel`, `SparseGraph<T>`, `Polyomino.Generate`, `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, BSP / WFC / Maze gen.
 
-[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.5...HEAD
+[Unreleased]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.5...v0.1.0
 [0.1.0-preview.5]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.4...v0.1.0-preview.5
 [0.1.0-preview.4]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.3...v0.1.0-preview.4
 [0.1.0-preview.3]: https://github.com/MrRyzen/ShadowLib/compare/v0.1.0-preview.2...v0.1.0-preview.3

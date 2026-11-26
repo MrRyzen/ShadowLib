@@ -34,12 +34,12 @@
 
 ### RNG Noise
 
-- **`SimplexNoise`** — 2D and 3D deterministic simplex noise seeded via `IRandom`. Fisher-Yates shuffled permutation table, pre-computed mod12, `AggressiveInlining`. Includes `Fractal()` (fBm) with configurable octaves, persistence, and lacunarity. See `ShadowLib/RNG/Noise/`.
+- **`SimplexNoise`** — 2D and 3D deterministic simplex noise seeded via `IRandom`. Fisher-Yates shuffled permutation table, pre-computed mod12, `AggressiveInlining`. Includes `Fractal()` (fBm) with configurable octaves, persistence, and lacunarity. See `Runtime/RNG/Noise/`.
 
 ```csharp
 var noise = new SimplexNoise(rng);
-float value = noise.Sample(x, y);              // 2D, ~[-1, 1]
-float value = noise.Sample(x, y, z);           // 3D, ~[-1, 1]
+float h2d   = noise.Sample(x, y);              // 2D, ~[-1, 1]
+float h3d   = noise.Sample(x, y, z);           // 3D, ~[-1, 1]
 float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 ```
 
@@ -56,7 +56,7 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 
 - **Grid pathfinding (`ShadowLib.Spatial.Pathfinding`)** — `GridAStar` (cheapest path on weighted terrain), `GridJumpPointSearch` (walkable/blocked maps, fastest on rooms and corridors) and `GridFlowField` (one field for any number of agents sharing goals). Static functions over a byte cost map and caller-owned `Span` buffers: no allocation per query, integer costs, four-way or eight-way movement, and callable from Burst jobs. `GridPathfinder` wraps them for `Grid2D` in (x, y) terms.
 
-**Future consideration:** `CanOccupyCell(x, y, w, h)` region check is O(w\*h). For large grids + large entity footprints (RTS base placement, 1000x1000 influence maps), consider adding an occupancy bitmask or 2D prefix-sum occupancy map for O(1) rect queries.
+**Future consideration:** `Grid2D.CanOccupy(x, y, shape)` is O(cells in the shape). For large grids + large entity footprints (RTS base placement, 1000x1000 influence maps), consider adding an occupancy bitmask or 2D prefix-sum occupancy map for O(1) rect queries.
 
 ### Procedural
 

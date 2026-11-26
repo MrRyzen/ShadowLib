@@ -4,15 +4,13 @@ namespace ShadowLib.RNG.Distributions
     using System.Collections.Generic;
     using System;
 
-
     /// <summary>
-    /// 
+    /// Weighted tables keyed by tier (rarity, level band): one <see cref="DynamicWeightTable{T}"/> per tier.
     /// </summary>
     /// <typeparam name="T">The type of items in the tiered table.</typeparam>
     public class TieredTable<T> where T : IEquatable<T>
     {
         private readonly Dictionary<int, DynamicWeightTable<T>> _entries = new ();
-
 
         /// <summary>
         /// Empty constructor for serialization and manual tier addition.
@@ -21,6 +19,12 @@ namespace ShadowLib.RNG.Distributions
         {
         }
 
+        /// <summary>
+        /// Adds a tier, or replaces it if the tier already exists.
+        /// </summary>
+        /// <param name="tier">The tier key.</param>
+        /// <param name="items">The tier's items with their weights. Items must be unique within the tier.</param>
+        /// <exception cref="ArgumentException">An item appears twice. An existing tier is left untouched.</exception>
         public void AddTier(int tier, IEnumerable<(T item, float weight)> items)
         {
             var table = new DynamicWeightTable<T>();
@@ -33,6 +37,14 @@ namespace ShadowLib.RNG.Distributions
             _entries[tier] = table;
         }
 
+        /// <summary>
+        /// Picks <paramref name="drops"/> items from a tier, with replacement. One draw per pick.
+        /// </summary>
+        /// <param name="rng">The random source.</param>
+        /// <param name="tier">The tier to pick from.</param>
+        /// <param name="drops">How many items to pick.</param>
+        /// <exception cref="ArgumentException">The tier does not exist.</exception>
+        /// <exception cref="InvalidOperationException">The tier has nothing pickable.</exception>
         public T[] Sample(IRandom rng, int tier, int drops = 1)
         {
             var table = GetTier(tier);
@@ -46,6 +58,10 @@ namespace ShadowLib.RNG.Distributions
             return results;
         }
 
+        /// <summary>
+        /// Gets a tier's table, for influence, stock and the other per-item settings.
+        /// </summary>
+        /// <exception cref="ArgumentException">The tier does not exist.</exception>
         public DynamicWeightTable<T> GetTier(int tier)
         {
             if (!_entries.TryGetValue(tier, out var table))
@@ -54,6 +70,9 @@ namespace ShadowLib.RNG.Distributions
             return table;
         }
 
+        /// <summary>
+        /// Gets the keys of every tier, in no particular order.
+        /// </summary>
         public int[] GetTiers()
         {
             var tiers = new int[_entries.Count];

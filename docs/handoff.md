@@ -1,4 +1,4 @@
-# Handoff — 2026-11-26 (end of third session)
+# Handoff — 2026-11-26 (end of fourth session: 0.1.0 release prep)
 
 ## Goal
 
@@ -8,6 +8,8 @@ Finish the ShadowLib roadmap (`SHADOWLIB_ROADMAP.md`) in three projects, agreed 
 2. **The small roadmap items** — done. This session: `Polyomino.Generate` / `Polycube.Generate` (item 11), `RandomWalk` (12), `SpacedPlacement` (13), `CellularAutomata` (14), and grid pathfinding (item 10), which the user widened from "A*" to A*, Jump Point Search and flow fields.
 3. **BSP, WFC, maze generation** — **deferred by the user on 2026-11-26 ("drop those till needed")**. Do not start them unprompted. If one is asked for, it needs its own short design conversation first; the roadmap has no API for any of them.
 
+4. **Release prep for `0.1.0`** (fourth session, the user asked for "a final polish, optimization and doc update pass then bump version to first release v0.1") — done, see "Release prep" below.
+
 So this roadmap pass is finished, and every fix found by the 2026-11-26 speed and determinism runs is done or deliberately declined (see Next Step). Nothing is in progress.
 
 ## Current State
@@ -15,10 +17,20 @@ So this roadmap pass is finished, and every fix found by the 2026-11-26 speed an
 - Local `main` is at `0c375a4` plus handoff commits. The last library change is the `ScalingCurve.Logarithmic` fix in `c8d4f4a` (`0c375a4` reverts the `Range` rewrite that came with it). **Nothing is pushed**; the user pushes. No feature branches or extra worktrees remain from this work (`determinism-fixes-and-perf` is an older branch, not touched).
 - `dotnet test ShadowLib.sln -c Release`: 294/294 on Windows and, run in a `dotnet/sdk:8.0` container, on Linux (`[Explicit]` tests are not counted). `dotnet run --project ShadowLib.Runner` exits 0 and prints the same output on repeated `--no-build` runs.
 - Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1, Burst 2.0.0): 23/23 EditMode tests against the tarball built from `c8d4f4a`. The full matrix was re-run on `0c375a4`: all 39 fingerprint rows match on all ten runtimes (Windows .NET 8; Linux .NET 8 glibc, musl, intrinsics off; Linux .NET 9; Unity editor; built Windows and Linux players on Mono and IL2CPP). The only rows that still split belong to `Unity.Mathematics.Random` and `UnityEngine.Random`.
-- Version is still `0.1.0-preview.5`. `CHANGELOG.md` `[Unreleased]` holds all three sessions' work, including breaking changes. No release was cut.
+- **Version is `0.1.0`** in `package.json` and `Runtime/ShadowLib.csproj`; `CHANGELOG.md` has a `[0.1.0] — 2026-11-26` section and an empty `[Unreleased]`. **Not tagged and not pushed**: the user runs `git tag v0.1.0` and pushes, which triggers the release workflow.
+- The two bullets above describe the state before the release-prep commit. After it: 294/294 on Windows .NET 8, runner output and all 39 fingerprint rows byte-identical to the commit before, zero compiler warnings (NU1902 and the machine-local NU1801 remain). **Linux and Unity were not re-run on the release commit**: the ShadowLab editor stopped answering the `unity` CLI after `package_add` of the 0.1.0 tarball (`Main thread operation timed out after 30000ms` in `Logs/Editor.log`; the editor was idle and not focused). No Burst-compiled source changed (`Xoshiro128`, `Seeding`, `Pathfinding/` have an empty diff), so the earlier Burst results still apply, but the 23 EditMode tests should be run once against `com.shadowlib.core-0.1.0.tgz` before tagging if the user wants that on record.
 
 - **Determinism was measured across runtimes on 2026-11-26** (see "Determinism results" under Notes). The one finding in our own code, `ScalingCurve` exponential and logarithmic curves depending on the platform's pow and log, is fixed.
 - **Performance was measured in the Unity editor the same day.** The two slow spots found, `DynamicWeightTable.Sample` and managed `NextFloat`, are fixed. Managed `Range(int)` stays about twice the cost of `Unity.Mathematics.Random`'s by choice (see Next Step item 5).
+
+## Release prep (fourth session)
+
+- **Speed, output identical:** `CellularAutomata.Step` takes an unchecked path for interior cells (512x512, 5 steps: 12.4 ms to 5.0 ms on .NET 8); `Grid2D.Occupy` / `Free` look the occupant up once (4x4 item place + free: 531 ns to 239 ns) and `Free` no longer `stackalloc`s per footprint. Found by a Sonnet read-only audit, each verified and measured before keeping.
+- **Audit findings declined:** a membership mask for `BinPacker.BestFit` scoring (O(k squared) per candidate, only matters for large shapes), and build-time savings in `MarkovWordGenerator.Train` and `MarkovChain.BuildRow`.
+- **Flow-field bucket queue not done.** The heap pops in a total order (distance, then cell index), so a bucket queue could keep output identical only with an explicit tie rule on equal distances; it also needs a larger scratch (`ScratchLength` changes) and scans empty buckets on high-cost terrain (a cost-255 corridor is slower than the heap without a bitmap). That is a design change to the Burst core, not polish.
+- **Docs:** a Sonnet agent compiled every guide snippet against the source. Fixed: `ConditionEvaluator` lives in `ShadowLib.RNG.Modifiers` (the guide said `Utilities` and the changelog said the namespace was removed), `Curve` is the struct and `ScalingCurve` the static factory class, `ShadowLib.RNG.Sources` was never named, README claimed Unity 2021.3 to 6000 was verified and that IL2CPP was unchecked, plus smaller items. Added to the guide: path and generated-content entries in the "For LLMs" chooser, the managed `Range(int)` cost, Mono float precision.
+- **Open question for the user:** `ConditionEvaluator` is the only type left in `ShadowLib.RNG.Modifiers`. Moving it would be a breaking change, so it was documented, not moved.
+- **Left alone:** `ConditionEvaluator.Evaluate` writes to `Console` and returns false on a bad expression, against the CONTRIBUTING rule to throw rather than log. Changing it changes behaviour.
 
 ## Files in Flight
 
@@ -26,7 +38,7 @@ None in this repo; the working tree is clean on both branches.
 
 In `L:\Projects\games\ShadowLab` (a different repo, left uncommitted on purpose because its manifest already carried the user's own pending changes):
 
-- `Packages/manifest.json` / `packages-lock.json` — `com.shadowlib.core` pointing at `file:L:/Projects/packages/shadowlib/artifacts/upm/com.shadowlib.core-0.1.0-preview.5.tgz` (absolute path to a git-ignored build output; this machine only).
+- `Packages/manifest.json` / `packages-lock.json` — `com.shadowlib.core` pointing at `file:L:/Projects/packages/shadowlib/artifacts/upm/com.shadowlib.core-0.1.0.tgz` (changed from the preview.5 tarball in the fourth session) (absolute path to a git-ignored build output; this machine only).
 - `Assets/_project/Tests/ShadowLibBurst/` — `ShadowLib.BurstTests.asmdef`, `XoshiroBurstTests.cs`, `WeightTableUnityTests.cs`, `Backpack3DUnityTests.cs`, and new this session `ShapeGenerateUnityTests.cs` (4 pin tests), `ProceduralUnityTests.cs` (walk pin, placement pin, cellular automata) and `PathfindingBurstTests.cs` (A*, A* in fast-float mode, JPS, mixed A*/JPS on one scratch, flow field with overrun padding, parallel A*).
 - Also in ShadowLab, uncommitted: `RngSpeedBenchmark.cs`, `DeterminismCrossRuntime.cs` and a copy of `DeterminismFingerprint.cs` in the same test folder, and `Unity.Mathematics` added to `ShadowLib.BurstTests.asmdef`. `DeterminismCrossRuntime.cs` reads its .NET reference from an absolute path in a session temp folder that no longer exists; point it at a fresh `WriteFingerprint` output before re-running.
 - `artifacts/determinism-player/` in this repo (git-ignored): a throwaway Unity project holding only the ShadowLib tarball, the fingerprint and a batch-mode builder, with four built players under `Builds/`. Safe to delete; rebuildable from the notes below.
@@ -111,7 +123,7 @@ The roadmap pass is finished (BSP, WFC and maze generation are deferred until th
 
 ### Other things the user may ask for, none started
 
-- **A release:** bump `package.json` `version` and `Runtime/ShadowLib.csproj` `<Version>` together, move `[Unreleased]` in `CHANGELOG.md` under the new version, tag `v*.*.*`. The user pushes and tags.
+- **The `0.1.0` tag:** everything is bumped and committed; the user tags `v0.1.0` and pushes.
 - **Time the real RNGNeeds:** it is not installed in ShadowLab. If the user imports it, add its rows to `RngSpeedBenchmark.cs` and the determinism runner (API per its docs: `using RNGNeeds;`, `ProbabilityList<T>`, `AddItem(value, probability)`, `PickValue()`).
 - **ARM64:** nothing has run on ARM. Needs QEMU in Docker (a privileged `tonistiigi/binfmt` container; ask first) or real hardware.
 - **Burst timings for pathfinding:** only managed-.NET numbers exist (`GridPathfindingBenchmark`).

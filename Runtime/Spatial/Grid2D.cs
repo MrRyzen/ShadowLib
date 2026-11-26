@@ -273,13 +273,22 @@ namespace ShadowLib.Spatial
                 return false;
 
             var offsets = shape.Offsets;
+            if (offsets.Length == 0)
+                return true;
+
+            if (!_occupancyIndex.TryGetValue(occupant, out var indices))
+            {
+                indices = new HashSet<int>();
+                _occupancyIndex[occupant] = indices;
+            }
+
             for (int i = 0; i < offsets.Length; i++)
             {
                 int cx = x + offsets[i].Col;
                 int cy = y + offsets[i].Row;
                 int index = cy * Width + cx;
                 _cells[index].Occupy(occupant);
-                TrackOccupant(occupant, index);
+                indices.Add(index);
             }
 
             return true;
@@ -291,17 +300,10 @@ namespace ShadowLib.Spatial
             if (!_occupancyIndex.TryGetValue(occupant, out var indices))
                 return;
 
-            Span<int> snapshot = stackalloc int[indices.Count];
+            foreach (int index in indices)
+                _cells[index].Clear();
 
-            int n = 0;
-            foreach (int i in indices)
-                snapshot[n++] = i;
-
-            for (int j = 0; j < n; j++)
-            {
-                _cells[snapshot[j]].Clear();
-                UntrackOccupant(occupant, snapshot[j]);
-            }
+            _occupancyIndex.Remove(occupant);
         }
 
         /// <inheritdoc/>
@@ -362,7 +364,8 @@ namespace ShadowLib.Spatial
         /// </summary>
         /// <param name="x">The column index of the source cell.</param>
         /// <param name="y">The row index of the source cell.</param>
-        /// <returns>A list containing between 0 and 4 neighboring cells.</returns>
+        /// <param name="buffer">Receives the cells; filling stops when it is full.</param>
+        /// <returns>The number of cells written, between 0 and 4.</returns>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the coordinates are outside grid bounds.
         /// </exception>
@@ -385,7 +388,8 @@ namespace ShadowLib.Spatial
         /// </summary>
         /// <param name="x">The column index of the source cell.</param>
         /// <param name="y">The row index of the source cell.</param>
-        /// <returns>A list containing between 0 and 8 neighboring cells.</returns>
+        /// <param name="buffer">Receives the cells; filling stops when it is full.</param>
+        /// <returns>The number of cells written, between 0 and 8.</returns>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the coordinates are outside grid bounds.
         /// </exception>
@@ -414,7 +418,8 @@ namespace ShadowLib.Spatial
         /// <param name="x">The column index of the origin cell.</param>
         /// <param name="y">The row index of the origin cell.</param>
         /// <param name="range">The maximum Manhattan distance. Must be greater than or equal to zero.</param>
-        /// <returns>A list of all cells within range, in row-major order.</returns>
+        /// <param name="buffer">Receives the cells; filling stops when it is full.</param>
+        /// <returns>The number of cells written, in row-major order.</returns>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when the coordinates are outside grid bounds, or when <paramref name="range"/> is negative.
         /// </exception>
@@ -453,7 +458,8 @@ namespace ShadowLib.Spatial
         /// <param name="y">The row index of the top-left corner of the region.</param>
         /// <param name="width">The number of columns in the region. Must be greater than zero.</param>
         /// <param name="height">The number of rows in the region. Must be greater than zero.</param>
-        /// <returns>A list of all cells within the (clamped) rectangular region.</returns>
+        /// <param name="buffer">Receives the cells; filling stops when it is full.</param>
+        /// <returns>The number of cells written from the (clamped) region, in row-major order.</returns>
         /// <exception cref="ArgumentOutOfRangeException">
         /// Thrown when <paramref name="width"/> or <paramref name="height"/> is less than or equal to zero.
         /// </exception>
@@ -589,7 +595,8 @@ namespace ShadowLib.Spatial
         /// Finds all cells that satisfy <paramref name="predicate"/>, in row-major order.
         /// </summary>
         /// <param name="predicate">The condition to test against each cell.</param>
-        /// <returns>A list of all matching cells. Empty list if no matches.</returns>
+        /// <param name="buffer">Receives the cells; filling stops when it is full.</param>
+        /// <returns>The number of matching cells written.</returns>
         /// <exception cref="ArgumentNullException">Thrown when <paramref name="predicate"/> is null.</exception>
         public int FindAllCells(Predicate<TCell> predicate, Span<TCell> buffer)
         {
@@ -673,27 +680,6 @@ namespace ShadowLib.Spatial
 
             /// <inheritdoc/>
             public readonly void Dispose() { }
-        }
-
-        private void TrackOccupant(TOccupant occupant, int index)
-        {
-            if (!_occupancyIndex.TryGetValue(occupant, out var indices))
-            {
-                indices = new HashSet<int>();
-                _occupancyIndex[occupant] = indices;
-            }
-
-            indices.Add(index);
-        }
-
-        private void UntrackOccupant(TOccupant occupant, int index)
-        {
-            if (!_occupancyIndex.TryGetValue(occupant, out var indices))
-                return;
-
-            indices.Remove(index);
-            if (indices.Count == 0)
-                _occupancyIndex.Remove(occupant);
         }
 
         private bool TryGetIndex(int x, int y, out int index)

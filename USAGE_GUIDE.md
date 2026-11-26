@@ -2,7 +2,7 @@
 
 This document is the canonical reference for using ShadowLib. It is written for both human developers and LLM-assisted contributors. Where the two need different guidance, sections are marked accordingly.
 
-> **Pre-release.** Public API may break before `1.0.0`. Pin a specific version when consuming.
+> **Pre-1.0.** A minor version may break public API before `1.0.0`; `CHANGELOG.md` lists every break. Pin a specific version when consuming.
 
 ---
 
@@ -30,7 +30,7 @@ If you can't decide between modules, follow the dependency arrow: most things ul
 `Window → Package Manager → + → Add package from git URL…`
 
 ```
-https://github.com/MrRyzen/ShadowLib.git#v0.1.0-preview.5
+https://github.com/MrRyzen/ShadowLib.git#v0.1.0
 ```
 
 Always pin a tag — `main` will move under you.
@@ -85,6 +85,8 @@ var orchestrator = new Orchestrator(root);
 There are three kinds. Pick by how long the generator lives and whether a repeat should give the same numbers.
 
 ```csharp
+using ShadowLib.RNG.Sources;   // IRandom, Xoshiro128StarStar, Xoshiro128
+
 // Long-lived: one stream per system, continues where it left off.
 IRandom lootRng = orchestrator.CreateRNG("loot");
 IRandom aiRng   = orchestrator.CreateRNG("ai.archer.42");   // dot-paths are fine
@@ -149,7 +151,7 @@ struct ChunkJob : IJobParallelFor
 }
 ```
 
-`Xoshiro128` is an unmanaged struct with the same methods and the same output as `Xoshiro128StarStar` for the same seed. It is mutable: keep it in a local or a non-readonly field, and pass it by `ref` if a callee should advance it. 
+`Xoshiro128` is an unmanaged struct with the same methods and the same output as `Xoshiro128StarStar` for the same seed. It is mutable: keep it in a local or a non-readonly field, and pass it by `ref` if a callee should advance it.
 
 **Burst and bit-exact replay.** Checked under Burst 2.0.0 in Unity 6000.6 against managed `Xoshiro128StarStar`, 16,384 draws per method:
 
@@ -159,7 +161,7 @@ struct ChunkJob : IJobParallelFor
 | `Deterministic` | Identical | Identical |
 | `Fast` | Identical | About 1 in 4 results differ in the low bits |
 
-So for replay across Burst and managed code, leave `FloatMode` at its default (or use `Deterministic`), or use only the integer and `NextFloat` / `NextDouble` draws in `Fast` jobs. Your own float math is subject to the same rule: a bound like `0.37f + index * 0.011f` computed once inside a Burst job and once in managed code can differ in the last bit, which then changes `Range(min, max)`. Compute such inputs in one place and pass them in.
+So for replay across Burst and managed code, leave `FloatMode` at its default (or use `Deterministic`), or use only the integer and `NextFloat` / `NextDouble` draws in `Fast` jobs. Your own float math is subject to the same rule: a bound like `0.37f + index * 0.011f` computed once inside a Burst job and once in managed code can differ in the last bit, which then changes `Range(min, max)`. The same holds between Mono and .NET, because Mono may evaluate a `float` expression at higher precision before rounding it. Compute such inputs in one place and pass them in, or build them from values that are exact in binary (`index * 0.5f`).
 
 What has been compared bit for bit (2026-11-26, one x64 machine, Unity 6000.6, Burst 2.0.0): raw draws, seeding, orchestrator streams and saves, every distribution, noise, curves, the shape and map generators and the pathfinders all matched across Windows .NET 8, Linux .NET 8 and 9, the Unity editor, and built Windows and Linux players on both Mono and IL2CPP. Nothing has been run on ARM. `Tests/Runtime/DeterminismFingerprint.cs` is the code that was hashed; run its `WriteFingerprint` test on two runtimes and compare the files to repeat the check.
 
@@ -207,7 +209,7 @@ Guid id = UUID.GenerateDeterministicUUID(seed: someSeed, context: rng.NextULong(
 
 ### `IRandom`
 
-The contract every RNG implements. Keep your code typed against this interface, not concrete classes.
+The contract every RNG implements, in `ShadowLib.RNG.Sources` along with both generators. Keep your code typed against this interface, not concrete classes.
 
 ```csharp
 int    n  = rng.NextInt();
@@ -268,7 +270,7 @@ int count = table.SampleDistinct(rng, offer);    // up to 3 different items
 - **Repeat prevention.** The last pick is left out of the next one unless it is the only pickable item. This does not re-roll, so it never costs an extra draw.
 - **`SampleDistinct`** returns how many items it wrote, which is fewer than requested when the pickable items run out. It reads each influence source once and only its first item is subject to repeat prevention.
 - **Determinism.** Every pick is exactly one `rng.NextFloat()`, and none when nothing is pickable, so the same seed with the same game state replays exactly.
-- **Items are unique.** `Add` throws `ArgumentException` for an item already in the table.
+- **Items are unique.** `Add` throws `ArgumentException` for an item already in the table. The item type must implement `IEquatable<T>` (also for `TieredTable<T>` and `EffectWheel`).
 - **Weights are single-precision.** `NaN` and infinite weights are rejected, and picking throws `OverflowException` if the weights sum past `float.MaxValue`. An item whose weight is tiny next to the total (1 beside 100,000,000) can round away and never be picked, so keep weights within a few orders of magnitude of each other.
 - **Cost.** Each `Sample`, `TotalWeight` and `GetProbability` is one pass over the items. For a large fixed table in a hot loop use `AliasTable<T>`.
 
@@ -410,7 +412,7 @@ Always seed it from an `IRandom` (don't construct an `IRandom` just for noise �
 
 ## Scaling curves
 
-Zero-allocation `readonly struct`. Build once, call `Evaluate` per frame freely.
+The `ScalingCurve` factories return a `Curve`, a zero-allocation `readonly struct`. Build once, call `Evaluate` per frame freely.
 
 ```csharp
 using ShadowLib.RNG.Utilities;
@@ -496,7 +498,7 @@ var grid = new Grid2D<MyCell, MyItem>(
 bool ok = grid.CanOccupy(x: 2, y: 3, Polyomino.FromRect(2, 2));
 grid.Occupy(2, 3, item, Polyomino.FromRect(2, 2));
 grid.Free(item);                            // O(1) thanks to internal occupancy index
-var occupied = grid.GetOccupiedCells();     // Dictionary<TOccupant, ...>
+var occupied = grid.GetOccupiedCells();     // IReadOnlyDictionary<TOccupant, HashSet<int>> of cell indices
 ```
 
 The internal `Dictionary<TOccupant, HashSet<int>>` index is what makes `Free(occupant)` O(1) — keep `TOccupant` cheap to hash.
@@ -693,7 +695,7 @@ int taken = RandomWalk.Generate(rng, steps, width: 32, height: 32, start: (16, 1
 - Candidates are visited in a random order; each is kept if it is at least `minDistance` from everything already kept. A NaN distance counts as too close.
 - It may return fewer than `count` when the spacing cannot be met in that order. It never returns candidates closer than `minDistance`.
 - `T` can be anything; the distance function defines what "apart" means (Manhattan, Euclidean, path length).
-- One `rng.Range` draw per candidate examined, so picking a few from a long list is cheap (nothing is drawn when `count` is 0 or there are no candidates).
+- One `rng.Range` draw per candidate examined (none for the last one in the list), so picking a few from a long list is cheap (nothing is drawn when `count` is 0 or there are no candidates).
 - Results are distinct entries of the list. If the list itself holds the same value twice and `minDistance` is 0, both can come back.
 
 ### `CellularAutomata` — smooth noise into caves
@@ -771,7 +773,7 @@ To enable in Unity:
 Then:
 
 ```csharp
-using ShadowLib.RNG.Utilities;
+using ShadowLib.RNG.Modifiers;   // ConditionEvaluator is the only type in this namespace
 
 var ctx = new Dictionary<string, object> {
     ["PlayerLevel"] = 12,
@@ -791,10 +793,10 @@ In a non-Unity .NET project this is always available — the .csproj pulls NCalc
 ## Performance / zero-allocation patterns
 
 - **`Polyomino.Offsets` returns a `ReadOnlySpan`** — iterate without allocating.
-- **`ScalingCurve` is a `readonly struct`** — keep curves as fields, evaluate in hot paths without GC pressure.
+- **`Curve` (what the `ScalingCurve` factories return) is a `readonly struct`** — keep curves as fields, evaluate in hot paths without GC pressure.
 - **`Grid2D` uses a flat backing array** with a precomputed occupancy index — `Free(occupant)` is O(1).
 - **`AliasTable` sample is O(1)** with no per-call allocation.
-- Prefer `Range(int, int)` over `(int)(NextFloat() * n)` — the former is bias-free.
+- Prefer `Range(int, int)` over `(int)(NextFloat() * n)` — the former is bias-free. That costs something: in managed code it is about twice the time of `Unity.Mathematics.Random.NextInt(min, max)` (4.4 ns against 2.2 ns in the Unity 6000.6 editor), which uses a faster, slightly biased method. Inside Burst the two are level.
 - Avoid LINQ in hot paths; the library never uses LINQ internally and you shouldn't either at scale.
 - `orchestrator.CreateRNG("ctx")` re-uses the same instance for the same context — *don't* call it per frame; cache the returned `IRandom`.
 - `Derive` and `Next` allocate one small generator per call. In a hot loop or a job, take `DeriveSeed` / `NextSeed` once and build `Xoshiro128` structs from `Seeding.DeriveSeed64(seed, index)` instead.
@@ -847,7 +849,16 @@ Read this section before generating ShadowLib code.
    - A 3D inventory whose cells can be destroyed → `SpatialGraph3D<TOccupant>` with `Polycube` shapes.
 4. **Need to place items in a grid?** → `BinPacker<TOccupant>` against any `ISpace<TOccupant>` (2D only).
 5. **Need a deterministic ID?** → `UUID.GenerateDeterministicUUID(seed, context)`.
-6. **Need a level-driven curve?** → `ScalingCurve.{Linear, Exponential, Logarithmic, Stepped}`.
+6. **Need a level-driven curve?** → `ScalingCurve.{Linear, LinearClamped, Exponential, Logarithmic, Stepped}`.
+7. **Need a path on a grid?**
+   - From a `Grid2D`, in (x, y) terms → `GridPathfinder`.
+   - Inside a Unity job / Burst, or over your own byte cost map → the static `GridAStar` (weighted terrain), `GridJumpPointSearch` (walkable/blocked maps) or `GridFlowField` (many agents, shared goals).
+8. **Need generated content?**
+   - A random connected shape → `Polyomino.Generate` / `Polycube.Generate`.
+   - A wandering path (river, corridor, drunkard's walk) → `RandomWalk.Generate`.
+   - Scattered points that keep apart → `SpacedPlacement.Place`.
+   - Caves from noise → `CellularAutomata.Randomize` then `Step` on a `FieldGrid<bool>`.
+   - Smooth terrain or density values → `SimplexNoise`.
 
 ### Safe defaults
 
@@ -857,7 +868,7 @@ Read this section before generating ShadowLib code.
 
 ### Do not hallucinate these
 
-The following do **not** exist (as of `0.1.0-preview.5`):
+The following do **not** exist (as of `0.1.0`):
 
 - `UUID.V4()` / `UUID.V5()` — the methods are `GenerateRandomUUID()` and `GenerateDeterministicUUID(ulong seed, ulong context)`.
 - `Orchestrator.GetRng(string)` — it's `CreateRNG(string)`, which both creates and caches.
@@ -877,7 +888,7 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
 - `Polycube` / `Polyomino` rotation helpers, and `SpatialGraph3D` implementing `ISpace` or working with `BinPacker` — none of these exist.
 - `DynamicWeightTable<T>.AddWeight` / `MultiplyWeight` / `ResetWeights` / `UniformWeights` / `NormalizeWeights` / `GetBaseWeight` / `SetBaseWeight` — removed. Use `SetInfluence` for odds that change with game state, `SetEnabled(item, false)` to take an item out, `SetWeight` for a permanent change.
-- `WeightModifier<T>`, `ModifierOperation`, `ModifierLoader`, the `ShadowLib.RNG.Modifiers` namespace — removed. `ConditionEvaluator` still exists.
+- `WeightModifier<T>`, `ModifierOperation`, `ModifierLoader` — removed. `ConditionEvaluator` still exists, in the `ShadowLib.RNG.Modifiers` namespace (not `ShadowLib.RNG.Utilities` or `ShadowLib.Optional`).
 - An influence provider interface (`IProbabilityInfluenceProvider` or similar) — there is none; `SetInfluence` takes a `Func<float>`.
 - `DynamicWeightTable<T>` saving its own stock or last pick — it does not; see the save/load snippet in its section.
 - `IRandom.NextBool()` / `IRandom.Pick(...)` — not on the interface. Use `rng.Range(0, 2) == 0` and `RandomUtils.RandomSelect(list, rng)`.
@@ -890,7 +901,7 @@ If unsure whether something exists, check `SHADOWLIB_ROADMAP.md` (status table a
 
 A valid ShadowLib example has these in order, top to bottom:
 
-1. `using` directives for the specific sub-namespaces being used (`ShadowLib.RNG`, `ShadowLib.RNG.Distributions`, etc.).
+1. `using` directives for the specific sub-namespaces being used: `ShadowLib.RNG` (`Orchestrator`), `ShadowLib.RNG.Sources` (`IRandom`, the generators), `ShadowLib.RNG.Utilities` (`Seeding`, `ScalingCurve`, `RandomUtils`, `UUID`), `ShadowLib.RNG.Distributions`, and so on.
 2. `var orchestrator = new Orchestrator(Seeding.GenerateSeed64("..."))` exactly once at the top.
 3. One or more `var rng = orchestrator.CreateRNG("context-name")`, cached in a local or field.
 4. Whatever distribution / grid / packer the example demonstrates, taking the cached `IRandom`.
