@@ -43,8 +43,8 @@ namespace ShadowLib.Runner
             ]);
             Console.WriteLine("\nSampling from Tiered Table:");
             var rootSeed = Seeding.GenerateSeed64("test-seed");
-            Orchestrator.Initialize(rootSeed);
-            var rng = Orchestrator.CreateRNG("loot-sample");
+            var orchestrator = new Orchestrator(rootSeed);
+            var rng = orchestrator.CreateRNG("loot-sample");
 
             Item[] drops = new Item[6];
             var tier1 = loot.Sample(rng, 1, 2);
@@ -58,6 +58,10 @@ namespace ShadowLib.Runner
                 Console.WriteLine(item);
             }
 
+            Console.WriteLine("\nThrowaway streams:");
+            Console.WriteLine($"  Derive(\"chunk/3/4\") twice: {orchestrator.Derive("chunk/3/4").Range(0, 1000)}, {orchestrator.Derive("chunk/3/4").Range(0, 1000)} (same stream every call)");
+            Console.WriteLine($"  Next(\"chest\") twice:      {orchestrator.Next("chest").Range(0, 1000)}, {orchestrator.Next("chest").Range(0, 1000)} (next in a replayable series)");
+
             var weather = new MarkovChain<string>();
             weather.AddTransition("Sunny", "Sunny", 0.7f);
             weather.AddTransition("Sunny", "Cloudy", 0.3f);
@@ -68,7 +72,7 @@ namespace ShadowLib.Runner
             weather.AddTransition("Rainy", "Rainy", 0.4f);
             weather.Build();
 
-            var weatherRng = Orchestrator.CreateRNG("weather");
+            var weatherRng = orchestrator.CreateRNG("weather");
             var forecast = new string[7];
             int days = weather.Walk("Sunny", weatherRng, forecast);
             Console.WriteLine($"\nMarkov weather forecast: {string.Join(" -> ", forecast[..days])}");
@@ -81,7 +85,7 @@ namespace ShadowLib.Runner
             companyGen.Build();
 
             string[] suffixes = ["Inc.", "Corp.", "LLC", "Group", "Holdings", "Industries", "Systems", "Technologies"];
-            var nameRng = Orchestrator.CreateRNG("company-names");
+            var nameRng = orchestrator.CreateRNG("company-names");
             Console.WriteLine("\nMarkov-generated companies:");
             for (int i = 0; i < 5; i++)
             {

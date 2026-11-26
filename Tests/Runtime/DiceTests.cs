@@ -12,8 +12,8 @@ namespace ShadowLib.Tests
         [Test]
         public void Sample_AlwaysReturnsValueFromFaceArray()
         {
-            Orchestrator.Initialize(Seeding.GenerateSeed64("dice-test"));
-            var rng = Orchestrator.CreateRNG("dice");
+            var orchestrator = new Orchestrator(Seeding.GenerateSeed64("dice-test"));
+            var rng = orchestrator.CreateRNG("dice");
             string[] faces = { "a", "b", "c", "d", "e", "f" };
             var d6 = new Dice<string>(rng, faces);
 
@@ -27,16 +27,16 @@ namespace ShadowLib.Tests
         [Test]
         public void Constructor_RejectsEmptyFaceArray()
         {
-            Orchestrator.Initialize(Seeding.GenerateSeed64("dice-test"));
-            var rng = Orchestrator.CreateRNG("dice");
+            var orchestrator = new Orchestrator(Seeding.GenerateSeed64("dice-test"));
+            var rng = orchestrator.CreateRNG("dice");
             Assert.Throws<ArgumentException>(() => _ = new Dice<int>(rng, Array.Empty<int>()));
         }
 
         [Test]
         public void SampleMultiple_ReturnsRequestedCount()
         {
-            Orchestrator.Initialize(Seeding.GenerateSeed64("dice-test"));
-            var rng = Orchestrator.CreateRNG("dice");
+            var orchestrator = new Orchestrator(Seeding.GenerateSeed64("dice-test"));
+            var rng = orchestrator.CreateRNG("dice");
             var d = new Dice<int>(rng, new[] { 1, 2, 3, 4 });
             var rolls = d.SampleMultiple(7);
             Assert.AreEqual(7, rolls.Length);

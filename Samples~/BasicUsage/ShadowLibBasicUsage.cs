@@ -23,8 +23,8 @@ namespace ShadowLib.Samples
 
         private void Start()
         {
-            Orchestrator.Initialize(Seeding.GenerateSeed64(seedString));
-            var rng = Orchestrator.CreateRNG("loot");
+            var orchestrator = new Orchestrator(Seeding.GenerateSeed64(seedString));
+            var rng = orchestrator.CreateRNG("loot");
 
             var loot = new TieredTable<LootItem>();
             loot.AddTier(1, new (LootItem, float)[]
