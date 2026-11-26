@@ -73,7 +73,7 @@ namespace ShadowLib.RNG.Distributions
                 _probabilities[s] = scaledProbs[s];
                 _aliases[s] = l;
 
-                scaledProbs[l] = scaledProbs[l] + scaledProbs[s] - 1f;
+                scaledProbs[l] = (float)(scaledProbs[l] + scaledProbs[s]) - 1f;
 
                 if (scaledProbs[l] < 1f)
                     small.Push(l);

@@ -153,7 +153,7 @@ namespace ShadowLib.RNG.Distributions
                 _prob[start + s] = scaled[s];
                 _aliasTarget[start + s] = _target[start + l];
 
-                scaled[l] = scaled[l] + scaled[s] - 1f;
+                scaled[l] = (float)(scaled[l] + scaled[s]) - 1f;
                 if (scaled[l] < 1f) small[smallCount++] = l;
                 else large[largeCount++] = l;
             }

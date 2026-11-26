@@ -104,6 +104,24 @@ namespace ShadowLib.Tests
                 Assert.AreEqual((i, i, 0), placed[i]);
         }
 
+
+        [Test]
+        public void GetCellsForOccupant_ReturnsAscendingIndices_RegardlessOfPlacementOrder()
+        {
+            var grid = new Grid2D<TestCell, int>(8, 2, 1f, (x, y) => new TestCell());
+            var cell = Polyomino.FromRect(1, 1);
+            foreach (int x in new[] { 6, 1, 4, 0, 7, 3 })
+                grid.Occupy(x, 0, 99, cell);
+
+            Span<int> all = stackalloc int[8];
+            int count = grid.GetCellsForOccupant(99, all);
+            CollectionAssert.AreEqual(new[] { 0, 1, 3, 4, 6, 7 }, all.Slice(0, count).ToArray());
+
+            Span<int> truncated = stackalloc int[3];
+            count = grid.GetCellsForOccupant(99, truncated);
+            CollectionAssert.AreEqual(new[] { 0, 1, 3 }, truncated.Slice(0, count).ToArray());
+        }
+
         private sealed class TestCell : ICell<int>
         {
             public int X { get; private set; }

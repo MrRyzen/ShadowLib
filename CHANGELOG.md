@@ -8,6 +8,8 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 - **Behavior change:** `Seeding.DeriveSeed(uint, string)` now hashes the context with FNV-1a instead of summing its characters, so contexts that are anagrams of each other (`"chunk/1/2"` vs `"chunk/2/1"`) no longer collide. Seeds derived with the 32-bit overload differ from earlier previews; `DeriveSeed64` (and therefore `Orchestrator`) is unchanged.
 - **Behavior change:** `BinPacker.AutoSort` breaks ties between equally sized shapes by input order. Previously the order of ties depended on the runtime's unstable sort, so layouts with many same-sized items may differ from earlier previews.
+- `Grid2D.GetCellsForOccupant` returns indices in ascending order (and keeps the lowest ones when the buffer is too small) instead of exposing `HashSet` enumeration order.
+- Float math in `Range(float, float)`, `SimplexNoise`, `ScalingCurve`, `RandomUtils.Chance` and the alias-table builds is pinned to single precision with explicit casts, so results match on runtimes that evaluate `float` expressions in double (Mono without `float32`). Output on .NET is unchanged.
 - `RandomBag<T>.Sample` is O(1) instead of O(n); draw order is unchanged.
 - `UUID.GenerateDeterministicUUID` no longer allocates and is roughly 2.5x faster; output is unchanged on little-endian platforms and now identical on big-endian ones too.
 

@@ -71,7 +71,7 @@ namespace ShadowLib.RNG.Utilities
         /// <returns>True if the event occurs; otherwise, false.</returns>
         public static bool Chance(float probability, IRandom rng)
         {
-            return rng.Range(0, 10000) < (int)(probability * 10000);
+            return rng.Range(0, 10000) < (int)(float)(probability * 10000);
         }
     }
 }

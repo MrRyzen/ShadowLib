@@ -528,7 +528,8 @@ namespace ShadowLib.Spatial
         }
 
         /// <summary>
-        /// Writes the flat cell indices that contain the specified occupant into <paramref name="buffer"/>.
+        /// Writes the flat cell indices that contain the specified occupant into <paramref name="buffer"/>, in ascending order.
+        /// When the buffer is too small, the lowest indices are kept.
         /// O(k) where k is the number of cells occupied by the occupant, backed by an internal index.
         /// </summary>
         /// <param name="occupant">The occupant to search for.</param>
@@ -539,12 +540,24 @@ namespace ShadowLib.Spatial
             if (!_occupancyIndex.TryGetValue(occupant, out var indices))
                 return 0;
 
+            // ponytail: insertion sort keeps the smallest indices in ascending order, O(k * buffer); fine for item-sized footprints, switch to a sorted index if occupants span thousands of cells.
             int count = 0;
-            foreach (int i in indices)
+            foreach (int index in indices)
             {
-                if (count >= buffer.Length)
-                    return count;
-                buffer[count++] = i;
+                int slot;
+                if (count < buffer.Length)
+                    slot = count++;
+                else if (count > 0 && index < buffer[count - 1])
+                    slot = count - 1;
+                else
+                    continue;
+
+                while (slot > 0 && buffer[slot - 1] > index)
+                {
+                    buffer[slot] = buffer[slot - 1];
+                    slot--;
+                }
+                buffer[slot] = index;
             }
 
             return count;

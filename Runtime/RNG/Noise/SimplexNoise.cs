@@ -76,31 +76,32 @@ namespace ShadowLib.RNG.Noise
         {
             float n0, n1, n2;
 
+            // Explicit (float) casts pin every step to single precision on runtimes that evaluate float math in double.
             // Skew input space to determine which simplex cell we're in
-            float s = (x + y) * F2;
-            int i = FastFloor(x + s);
-            int j = FastFloor(y + s);
+            float s = (float)(x + y) * F2;
+            int i = FastFloor((float)(x + s));
+            int j = FastFloor((float)(y + s));
 
             float t = (i + j) * G2;
-            float x0 = x - (i - t);  // Unskewed distances from cell origin
-            float y0 = y - (j - t);
+            float x0 = x - (float)(i - t);  // Unskewed distances from cell origin
+            float y0 = y - (float)(j - t);
 
             // Determine which simplex (triangle) we are in
             int i1, j1;
             if (x0 > y0) { i1 = 1; j1 = 0; }  // Lower triangle
             else { i1 = 0; j1 = 1; }            // Upper triangle
 
-            float x1 = x0 - i1 + G2;
-            float y1 = y0 - j1 + G2;
-            float x2 = x0 - 1f + 2f * G2;
-            float y2 = y0 - 1f + 2f * G2;
+            float x1 = (float)(x0 - i1) + G2;
+            float y1 = (float)(y0 - j1) + G2;
+            float x2 = (float)(x0 - 1f) + 2f * G2;
+            float y2 = (float)(y0 - 1f) + 2f * G2;
 
             // Hash coordinates to gradient indices
             int ii = i & 255;
             int jj = j & 255;
 
             // Corner contributions
-            float t0 = 0.5f - x0 * x0 - y0 * y0;
+            float t0 = (float)(0.5f - (float)(x0 * x0)) - (float)(y0 * y0);
             if (t0 < 0f)
             {
                 n0 = 0f;
@@ -109,10 +110,10 @@ namespace ShadowLib.RNG.Noise
             {
                 t0 *= t0;
                 int gi0 = _permMod12[ii + _perm[jj]];
-                n0 = t0 * t0 * (Grad2X[gi0] * x0 + Grad2Y[gi0] * y0);
+                n0 = (float)(t0 * t0) * (float)((float)(Grad2X[gi0] * x0) + (float)(Grad2Y[gi0] * y0));
             }
 
-            float t1 = 0.5f - x1 * x1 - y1 * y1;
+            float t1 = (float)(0.5f - (float)(x1 * x1)) - (float)(y1 * y1);
             if (t1 < 0f)
             {
                 n1 = 0f;
@@ -121,10 +122,10 @@ namespace ShadowLib.RNG.Noise
             {
                 t1 *= t1;
                 int gi1 = _permMod12[ii + i1 + _perm[jj + j1]];
-                n1 = t1 * t1 * (Grad2X[gi1] * x1 + Grad2Y[gi1] * y1);
+                n1 = (float)(t1 * t1) * (float)((float)(Grad2X[gi1] * x1) + (float)(Grad2Y[gi1] * y1));
             }
 
-            float t2 = 0.5f - x2 * x2 - y2 * y2;
+            float t2 = (float)(0.5f - (float)(x2 * x2)) - (float)(y2 * y2);
             if (t2 < 0f)
             {
                 n2 = 0f;
@@ -133,11 +134,11 @@ namespace ShadowLib.RNG.Noise
             {
                 t2 *= t2;
                 int gi2 = _permMod12[ii + 1 + _perm[jj + 1]];
-                n2 = t2 * t2 * (Grad2X[gi2] * x2 + Grad2Y[gi2] * y2);
+                n2 = (float)(t2 * t2) * (float)((float)(Grad2X[gi2] * x2) + (float)(Grad2Y[gi2] * y2));
             }
 
             // Scale to [-1, 1]
-            return 70f * (n0 + n1 + n2);
+            return 70f * (float)((float)(n0 + n1) + n2);
         }
 
         /// <summary>
@@ -150,15 +151,15 @@ namespace ShadowLib.RNG.Noise
             float n0, n1, n2, n3;
 
             // Skew input space
-            float s = (x + y + z) * F3;
-            int i = FastFloor(x + s);
-            int j = FastFloor(y + s);
-            int k = FastFloor(z + s);
+            float s = (float)((float)(x + y) + z) * F3;
+            int i = FastFloor((float)(x + s));
+            int j = FastFloor((float)(y + s));
+            int k = FastFloor((float)(z + s));
 
             float t = (i + j + k) * G3;
-            float x0 = x - (i - t);
-            float y0 = y - (j - t);
-            float z0 = z - (k - t);
+            float x0 = x - (float)(i - t);
+            float y0 = y - (float)(j - t);
+            float z0 = z - (float)(k - t);
 
             // Determine which simplex (tetrahedron) we are in
             int i1, j1, k1, i2, j2, k2;
@@ -176,22 +177,22 @@ namespace ShadowLib.RNG.Noise
                 else { i1 = 0; j1 = 1; k1 = 0; i2 = 1; j2 = 1; k2 = 0; }                 // YXZ
             }
 
-            float x1 = x0 - i1 + G3;
-            float y1 = y0 - j1 + G3;
-            float z1 = z0 - k1 + G3;
-            float x2 = x0 - i2 + 2f * G3;
-            float y2 = y0 - j2 + 2f * G3;
-            float z2 = z0 - k2 + 2f * G3;
-            float x3 = x0 - 1f + 3f * G3;
-            float y3 = y0 - 1f + 3f * G3;
-            float z3 = z0 - 1f + 3f * G3;
+            float x1 = (float)(x0 - i1) + G3;
+            float y1 = (float)(y0 - j1) + G3;
+            float z1 = (float)(z0 - k1) + G3;
+            float x2 = (float)(x0 - i2) + 2f * G3;
+            float y2 = (float)(y0 - j2) + 2f * G3;
+            float z2 = (float)(z0 - k2) + 2f * G3;
+            float x3 = (float)(x0 - 1f) + 3f * G3;
+            float y3 = (float)(y0 - 1f) + 3f * G3;
+            float z3 = (float)(z0 - 1f) + 3f * G3;
 
             int ii = i & 255;
             int jj = j & 255;
             int kk = k & 255;
 
             // Corner 0
-            float t0 = 0.6f - x0 * x0 - y0 * y0 - z0 * z0;
+            float t0 = (float)((float)(0.6f - (float)(x0 * x0)) - (float)(y0 * y0)) - (float)(z0 * z0);
             if (t0 < 0f)
             {
                 n0 = 0f;
@@ -200,11 +201,11 @@ namespace ShadowLib.RNG.Noise
             {
                 t0 *= t0;
                 int gi0 = _permMod12[ii + _perm[jj + _perm[kk]]];
-                n0 = t0 * t0 * (Grad3X[gi0] * x0 + Grad3Y[gi0] * y0 + Grad3Z[gi0] * z0);
+                n0 = (float)(t0 * t0) * (float)((float)((float)(Grad3X[gi0] * x0) + (float)(Grad3Y[gi0] * y0)) + (float)(Grad3Z[gi0] * z0));
             }
 
             // Corner 1
-            float t1 = 0.6f - x1 * x1 - y1 * y1 - z1 * z1;
+            float t1 = (float)((float)(0.6f - (float)(x1 * x1)) - (float)(y1 * y1)) - (float)(z1 * z1);
             if (t1 < 0f)
             {
                 n1 = 0f;
@@ -213,11 +214,11 @@ namespace ShadowLib.RNG.Noise
             {
                 t1 *= t1;
                 int gi1 = _permMod12[ii + i1 + _perm[jj + j1 + _perm[kk + k1]]];
-                n1 = t1 * t1 * (Grad3X[gi1] * x1 + Grad3Y[gi1] * y1 + Grad3Z[gi1] * z1);
+                n1 = (float)(t1 * t1) * (float)((float)((float)(Grad3X[gi1] * x1) + (float)(Grad3Y[gi1] * y1)) + (float)(Grad3Z[gi1] * z1));
             }
 
             // Corner 2
-            float t2 = 0.6f - x2 * x2 - y2 * y2 - z2 * z2;
+            float t2 = (float)((float)(0.6f - (float)(x2 * x2)) - (float)(y2 * y2)) - (float)(z2 * z2);
             if (t2 < 0f)
             {
                 n2 = 0f;
@@ -226,11 +227,11 @@ namespace ShadowLib.RNG.Noise
             {
                 t2 *= t2;
                 int gi2 = _permMod12[ii + i2 + _perm[jj + j2 + _perm[kk + k2]]];
-                n2 = t2 * t2 * (Grad3X[gi2] * x2 + Grad3Y[gi2] * y2 + Grad3Z[gi2] * z2);
+                n2 = (float)(t2 * t2) * (float)((float)((float)(Grad3X[gi2] * x2) + (float)(Grad3Y[gi2] * y2)) + (float)(Grad3Z[gi2] * z2));
             }
 
             // Corner 3
-            float t3 = 0.6f - x3 * x3 - y3 * y3 - z3 * z3;
+            float t3 = (float)((float)(0.6f - (float)(x3 * x3)) - (float)(y3 * y3)) - (float)(z3 * z3);
             if (t3 < 0f)
             {
                 n3 = 0f;
@@ -239,11 +240,11 @@ namespace ShadowLib.RNG.Noise
             {
                 t3 *= t3;
                 int gi3 = _permMod12[ii + 1 + _perm[jj + 1 + _perm[kk + 1]]];
-                n3 = t3 * t3 * (Grad3X[gi3] * x3 + Grad3Y[gi3] * y3 + Grad3Z[gi3] * z3);
+                n3 = (float)(t3 * t3) * (float)((float)((float)(Grad3X[gi3] * x3) + (float)(Grad3Y[gi3] * y3)) + (float)(Grad3Z[gi3] * z3));
             }
 
             // Scale to [-1, 1]
-            return 32f * (n0 + n1 + n2 + n3);
+            return 32f * (float)((float)((float)(n0 + n1) + n2) + n3);
         }
 
         /// <summary>
@@ -264,7 +265,7 @@ namespace ShadowLib.RNG.Noise
 
             for (int o = 0; o < octaves; o++)
             {
-                sum += amplitude * Sample(x * frequency, y * frequency);
+                sum += (float)(amplitude * Sample((float)(x * frequency), (float)(y * frequency)));
                 maxAmplitude += amplitude;
                 amplitude *= persistence;
                 frequency *= lacunarity;
@@ -285,7 +286,7 @@ namespace ShadowLib.RNG.Noise
 
             for (int o = 0; o < octaves; o++)
             {
-                sum += amplitude * Sample(x * frequency, y * frequency, z * frequency);
+                sum += (float)(amplitude * Sample((float)(x * frequency), (float)(y * frequency), (float)(z * frequency)));
                 maxAmplitude += amplitude;
                 amplitude *= persistence;
                 frequency *= lacunarity;

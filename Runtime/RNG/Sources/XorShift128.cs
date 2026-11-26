@@ -83,7 +83,7 @@ namespace ShadowLib.RNG.Sources
             if (max <= min)
                 throw new ArgumentOutOfRangeException(nameof(max), "max must be greater than min");
 
-            return NextFloat() * (max - min) + min;
+            return (float)((float)(NextFloat() * (float)(max - min)) + min);
         }
         /// <summary>
         /// Generates a random double within the specified range [min, max).

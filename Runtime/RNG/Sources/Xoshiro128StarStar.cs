@@ -237,7 +237,8 @@ namespace ShadowLib.RNG.Sources
             if (max <= min)
                 throw new ArgumentOutOfRangeException(nameof(max), "max must be greater than min");
 
-            return NextFloat() * (max - min) + min;
+            // Explicit casts pin every step to single precision on runtimes that evaluate float math in double.
+            return (float)((float)(NextFloat() * (float)(max - min)) + min);
         }
         /// <summary>
         /// Generates a random double within the specified range [min, max).

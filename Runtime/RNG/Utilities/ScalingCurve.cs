@@ -61,9 +61,10 @@ namespace ShadowLib.RNG.Utilities
         {
             float raw = _type switch
             {
-                CurveType.Linear => _start + _rate * level,
-                CurveType.Exponential => _start * MathF.Pow(1f + _rate, level),
-                CurveType.Logarithmic => _start + _rate * MathF.Log(level + 1),
+                // Explicit casts pin every step to single precision on runtimes that evaluate float math in double.
+                CurveType.Linear => (float)(_start + (float)(_rate * level)),
+                CurveType.Exponential => (float)(_start * (float)MathF.Pow((float)(1f + _rate), level)),
+                CurveType.Logarithmic => (float)(_start + (float)(_rate * (float)MathF.Log(level + 1))),
                 CurveType.Stepped => EvaluateStepped(level),
                 _ => throw new InvalidOperationException($"Unknown curve type: {_type}")
             };
