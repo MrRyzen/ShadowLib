@@ -20,6 +20,9 @@ namespace ShadowLib.RNG.Distributions
             public T Item;
             public float Weight;
             public bool Enabled;
+            public Func<float>? InfluenceSource;
+            public float MinWeight;
+            public float MaxWeight;
         }
 
         private readonly List<Entry> _entries;
@@ -95,7 +98,9 @@ namespace ShadowLib.RNG.Distributions
         /// <param name="item">The item to update.</param>
         /// <param name="weight">The new designed weight. Must be finite and greater than zero.</param>
         /// <returns>True if the item was found.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">The weight is not finite or not greater than zero.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">
+        /// The weight is not finite, not greater than zero, or outside the item's influence range.
+        /// </exception>
         public bool SetWeight(T item, float weight)
         {
             RequirePositiveFinite(weight, nameof(weight));
@@ -103,7 +108,54 @@ namespace ShadowLib.RNG.Distributions
             if (index < 0) return false;
 
             Entry entry = _entries[index];
+            if (entry.InfluenceSource != null && (weight < entry.MinWeight || weight > entry.MaxWeight))
+                throw new ArgumentOutOfRangeException(nameof(weight), "Weight must stay inside the item's influence range.");
+
             entry.Weight = weight;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>
+        /// Lets an external value move an item's weight between <paramref name="min"/> and <paramref name="max"/>.
+        /// The source is read on every pick: -1 gives <paramref name="min"/>, 0 the designed weight, +1 <paramref name="max"/>,
+        /// linear in between. Values outside -1..1 are clamped and NaN counts as 0.
+        /// </summary>
+        /// <param name="item">The item to influence.</param>
+        /// <param name="min">Weight at influence -1. May be zero, which makes the item unpickable there.</param>
+        /// <param name="max">Weight at influence +1.</param>
+        /// <param name="source">Returns the current influence. Must not call back into this table.</param>
+        /// <returns>True if the item was found.</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="source"/> is null.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The range is not finite or breaks 0 &lt;= min &lt;= designed weight &lt;= max.</exception>
+        public bool SetInfluence(T item, float min, float max, Func<float> source)
+        {
+            if (source == null) throw new ArgumentNullException(nameof(source));
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            Entry entry = _entries[index];
+            if (!(min >= 0f && min <= entry.Weight))
+                throw new ArgumentOutOfRangeException(nameof(min), "Min must be between zero and the designed weight.");
+            if (!(max >= entry.Weight) || float.IsInfinity(max))
+                throw new ArgumentOutOfRangeException(nameof(max), "Max must be finite and at least the designed weight.");
+
+            entry.InfluenceSource = source;
+            entry.MinWeight = min;
+            entry.MaxWeight = max;
+            _entries[index] = entry;
+            return true;
+        }
+
+        /// <summary>Removes an item's influence, leaving its designed weight.</summary>
+        /// <returns>True if the item was found.</returns>
+        public bool ClearInfluence(T item)
+        {
+            int index = IndexOf(item);
+            if (index < 0) return false;
+
+            Entry entry = _entries[index];
+            entry.InfluenceSource = null;
             _entries[index] = entry;
             return true;
         }
@@ -185,7 +237,22 @@ namespace ShadowLib.RNG.Distributions
 
         private static float EffectiveWeight(in Entry entry)
         {
-            return entry.Enabled ? entry.Weight : 0f;
+            if (!entry.Enabled) return 0f;
+            if (entry.InfluenceSource == null) return entry.Weight;
+
+            float influence = entry.InfluenceSource();
+            if (float.IsNaN(influence)) return entry.Weight;
+
+            return influence < 0f
+                ? Lerp(entry.Weight, entry.MinWeight, Math.Min(-influence, 1f))
+                : Lerp(entry.Weight, entry.MaxWeight, Math.Min(influence, 1f));
+        }
+
+        private static float Lerp(float from, float to, float t)
+        {
+            if (t <= 0f) return from;
+            if (t >= 1f) return to;
+            return from + (to - from) * t;
         }
 
         private int PickIndex(IRandom rng, float total)

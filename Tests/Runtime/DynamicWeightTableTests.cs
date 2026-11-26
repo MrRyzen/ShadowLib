@@ -95,5 +95,71 @@ namespace ShadowLib.Tests
             for (int i = 0; i < 10; i++) { t.Sample(rng); reference.NextFloat(); }
             Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
         }
+
+        [TestCase(-1f, 5f)]
+        [TestCase(-0.5f, 12.5f)]
+        [TestCase(0f, 20f)]
+        [TestCase(0.5f, 40f)]
+        [TestCase(1f, 60f)]
+        [TestCase(3f, 60f)]
+        [TestCase(-3f, 5f)]
+        [TestCase(float.NaN, 20f)]
+        [TestCase(float.PositiveInfinity, 60f)]
+        [TestCase(float.NegativeInfinity, 5f)]
+        public void Influence_MapsOntoRange(float influence, float expectedWeight)
+        {
+            var t = new DynamicWeightTable<string>();
+            t.Add("drain", 20f);
+            t.SetInfluence("drain", 5f, 60f, () => influence);
+            Assert.AreEqual(expectedWeight, t.TotalWeight);
+            Assert.AreEqual(20f, t.GetWeight("drain"));
+        }
+
+        [Test]
+        public void Influence_MinZero_SwitchesItemOff()
+        {
+            var t = PlainTable();
+            t.SetInfluence("D", 0f, 4f, () => -1f);
+            Assert.AreEqual(0f, t.GetProbability("D"));
+            var rng = new Xoshiro128StarStar(123UL);
+            for (int i = 0; i < 10_000; i++) Assert.AreNotEqual("D", t.Sample(rng));
+        }
+
+        [Test]
+        public void Influence_IsReadAtPickTime()
+        {
+            float corruption = 0f;
+            var t = PlainTable();
+            t.SetInfluence("A", 1f, 91f, () => corruption);
+            Assert.AreEqual(0.1f, t.GetProbability("A"), 1e-6f);
+            corruption = 1f;
+            Assert.AreEqual(0.91f, t.GetProbability("A"), 1e-6f);
+            t.ClearInfluence("A");
+            Assert.AreEqual(0.1f, t.GetProbability("A"), 1e-6f);
+        }
+
+        [Test]
+        public void Influence_SourceCalledOncePerPick()
+        {
+            int calls = 0;
+            var t = PlainTable();
+            t.SetInfluence("A", 1f, 2f, () => { calls++; return 0f; });
+            t.Sample(new Xoshiro128StarStar(123UL));
+            Assert.AreEqual(1, calls);
+        }
+
+        [Test]
+        public void Influence_Validation()
+        {
+            var t = PlainTable();
+            Assert.IsFalse(t.SetInfluence("Z", 0f, 1f, () => 0f));
+            Assert.Throws<ArgumentNullException>(() => t.SetInfluence("B", 1f, 3f, null!));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetInfluence("B", -1f, 3f, () => 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetInfluence("B", 2.5f, 3f, () => 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetInfluence("B", 1f, 1.5f, () => 0f));
+            t.SetInfluence("B", 1f, 3f, () => 0f);
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetWeight("B", 4f));
+            Assert.IsTrue(t.SetWeight("B", 3f));
+        }
     }
 }
