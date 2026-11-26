@@ -160,7 +160,7 @@ namespace ShadowLib.RNG.Sources
         /// Uses top 24 bits (good practice).
         /// </summary>
         public float NextFloat()
-            => (NextUInt() >> 8) * INV_24BIT;
+            => (int)(NextUInt() >> 8) * INV_24BIT;
 
         /// <summary>
         /// Uniform double in [0,1).
@@ -169,7 +169,7 @@ namespace ShadowLib.RNG.Sources
         public double NextDouble()
         {
             // Use 53 bits from a 64-bit value
-            ulong v = NextULong() >> 11; // keep top 53 bits
+            long v = (long)(NextULong() >> 11); // keep top 53 bits; signed so the conversion to double is the fast one
             return v * INV_53BIT;
         }
 
