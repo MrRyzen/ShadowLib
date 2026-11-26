@@ -67,7 +67,7 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 
 ### A* pathfinding on Grid2D
 
-Shortest path between two cells of a `Grid2D`, with caller-supplied walkability and step cost. No API designed yet. (Pathfinding was deliberately left out of `SpatialGraph3D`.)
+Shortest path between two cells of a `Grid2D`, with caller-supplied walkability and step cost. No API designed yet. Requirements: no allocation per query, tuned for speed, and a core usable from Unity jobs / Burst / ECS (an unmanaged struct over caller-supplied buffers, since `Runtime/` cannot reference `Unity.Collections`). (Pathfinding was deliberately left out of `SpatialGraph3D`.)
 
 ### Polyomino Generator
 
