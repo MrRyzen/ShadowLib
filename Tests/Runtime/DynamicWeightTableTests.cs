@@ -336,5 +336,78 @@ namespace ShadowLib.Tests
             Assert.AreEqual("B", last);
             Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
         }
+
+        [Test]
+        public void SampleDistinct_ReturnsDifferentItems()
+        {
+            var t = PlainTable();
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+            var results = new string[3];
+            for (int round = 0; round < 1000; round++)
+            {
+                Assert.AreEqual(3, t.SampleDistinct(rng, results));
+                Assert.AreEqual(3, new HashSet<string>(results).Count);
+                for (int i = 0; i < 3; i++) reference.NextFloat();
+            }
+            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+            t.TryGetLastPicked(out string last);
+            Assert.AreEqual(results[2], last);
+        }
+
+        [Test]
+        public void SampleDistinct_StopsEarly_WhenPoolRunsOut()
+        {
+            var t = PlainTable();
+            t.SetEnabled("A", false);
+            var results = new string[10];
+            int written = t.SampleDistinct(new Xoshiro128StarStar(123UL), results);
+            Assert.AreEqual(3, written);
+            CollectionAssert.AreEquivalent(new[] { "B", "C", "D" }, results[..3]);
+        }
+
+        [Test]
+        public void SampleDistinct_EmptySpanOrEmptyPool_WritesNothing()
+        {
+            var t = PlainTable();
+            t.SetLastPicked("A");
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+            Assert.AreEqual(0, t.SampleDistinct(rng, Span<string>.Empty));
+            foreach (var s in Letters) t.SetEnabled(s, false);
+            Assert.AreEqual(0, t.SampleDistinct(rng, new string[2]));
+            t.TryGetLastPicked(out string last);
+            Assert.AreEqual("A", last);
+            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+        }
+
+        [Test]
+        public void SampleDistinct_SpendsStock_AndReadsSourcesOnce()
+        {
+            int calls = 0;
+            var t = PlainTable();
+            t.SetStock("A", 1);
+            t.SetInfluence("B", 1f, 3f, () => { calls++; return 0f; });
+            var results = new string[4];
+            Assert.AreEqual(4, t.SampleDistinct(new Xoshiro128StarStar(123UL), results));
+            Assert.AreEqual(1, calls);
+            t.TryGetStock("A", out int units);
+            Assert.AreEqual(0, units);
+        }
+
+        [Test]
+        public void SampleDistinct_PreventRepeat_FirstSlotOnly()
+        {
+            var t = PlainTable();
+            t.PreventRepeat = true;
+            var rng = new Xoshiro128StarStar(123UL);
+            var results = new string[4];
+            for (int round = 0; round < 500; round++)
+            {
+                t.SetLastPicked("D");
+                Assert.AreEqual(4, t.SampleDistinct(rng, results));
+                Assert.AreNotEqual("D", results[0]);
+            }
+        }
     }
 }

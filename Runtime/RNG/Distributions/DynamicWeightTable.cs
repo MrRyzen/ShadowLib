@@ -32,6 +32,8 @@ namespace ShadowLib.RNG.Distributions
         private readonly List<Entry> _entries;
         private float[] _effective = Array.Empty<float>();
         private int _lastPicked = -1;
+        private int _repeatExcluded = -1;
+        private float _repeatExcludedWeight;
 
         /// <summary>
         /// Gets or sets whether the last picked item is kept out of the next pick.
@@ -337,6 +339,35 @@ namespace ShadowLib.RNG.Distributions
             return true;
         }
 
+        /// <summary>
+        /// Picks up to <c>results.Length</c> different items by effective weight, one draw per item.
+        /// Influence sources are read once for the whole call, and <see cref="PreventRepeat"/> only
+        /// constrains the first item.
+        /// </summary>
+        /// <param name="rng">The random number generator to draw from.</param>
+        /// <param name="results">Receives the picked items, in pick order.</param>
+        /// <returns>How many items were written; fewer than requested when the pickable items run out.</returns>
+        public int SampleDistinct(IRandom rng, Span<T> results)
+        {
+            if (rng == null) throw new ArgumentNullException(nameof(rng));
+            if (results.IsEmpty) return 0;
+
+            float total = ComputeEffectiveWeights();
+            int written = 0;
+            while (written < results.Length && total > 0f)
+            {
+                int index = PickIndex(rng, total);
+                results[written++] = _entries[index].Item;
+                CommitPick(index);
+
+                if (written == 1 && _repeatExcluded >= 0)
+                    _effective[_repeatExcluded] = _repeatExcludedWeight;
+                _effective[index] = 0f;
+                total = SumEffectiveWeights();
+            }
+            return written;
+        }
+
         private void CommitPick(int index)
         {
             _lastPicked = index;
@@ -355,8 +386,13 @@ namespace ShadowLib.RNG.Distributions
             for (int i = 0; i < _entries.Count; i++)
                 _effective[i] = EffectiveWeight(_entries[i]);
 
+            _repeatExcluded = -1;
             if (PreventRepeat && _lastPicked >= 0 && AnyPickableExcept(_lastPicked))
+            {
+                _repeatExcluded = _lastPicked;
+                _repeatExcludedWeight = _effective[_lastPicked];
                 _effective[_lastPicked] = 0f;
+            }
 
             return SumEffectiveWeights();
         }
