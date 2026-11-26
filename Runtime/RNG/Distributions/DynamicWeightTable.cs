@@ -11,7 +11,8 @@ namespace ShadowLib.RNG.Distributions
     /// <typeparam name="T">The type of items in the table.</typeparam>
     /// <remarks>
     /// Every pick consumes exactly one <see cref="IRandom.NextFloat"/> draw, and none when nothing is pickable.
-    /// Not thread-safe.
+    /// Weights are summed in single precision: picking and the weight queries throw <see cref="OverflowException"/>
+    /// if the total exceeds <see cref="float.MaxValue"/>. Not thread-safe.
     /// </remarks>
     public class DynamicWeightTable<T> where T : IEquatable<T>
     {
@@ -172,14 +173,19 @@ namespace ShadowLib.RNG.Distributions
         public bool SetInfluence(T item, float min, float max, Func<float> source)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
+            if (!(min >= 0f))
+                throw new ArgumentOutOfRangeException(nameof(min), "Min must be zero or greater.");
+            if (!(max >= min) || float.IsInfinity(max))
+                throw new ArgumentOutOfRangeException(nameof(max), "Max must be finite and at least min.");
+
             int index = IndexOf(item);
             if (index < 0) return false;
 
             Entry entry = _entries[index];
-            if (!(min >= 0f && min <= entry.Weight))
-                throw new ArgumentOutOfRangeException(nameof(min), "Min must be between zero and the designed weight.");
-            if (!(max >= entry.Weight) || float.IsInfinity(max))
-                throw new ArgumentOutOfRangeException(nameof(max), "Max must be finite and at least the designed weight.");
+            if (min > entry.Weight)
+                throw new ArgumentOutOfRangeException(nameof(min), "Min must not exceed the designed weight.");
+            if (max < entry.Weight)
+                throw new ArgumentOutOfRangeException(nameof(max), "Max must be at least the designed weight.");
 
             entry.InfluenceSource = source;
             entry.MinWeight = min;
@@ -224,7 +230,12 @@ namespace ShadowLib.RNG.Distributions
         /// <summary>Gives an item a limited stock, full at <paramref name="units"/>. Each pick spends one unit; at zero the item is unpickable.</summary>
         /// <returns>True if the item was found.</returns>
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="units"/> is less than one.</exception>
-        public bool SetStock(T item, int units) => SetStock(item, units, units);
+        public bool SetStock(T item, int units)
+        {
+            if (units < 1)
+                throw new ArgumentOutOfRangeException(nameof(units), "Units must be at least one.");
+            return SetStock(item, units, units);
+        }
 
         /// <summary>Gives an item a limited stock with separate current and full amounts, for restoring saved state.</summary>
         /// <param name="item">The item to stock.</param>
@@ -394,7 +405,10 @@ namespace ShadowLib.RNG.Distributions
                 _effective[_lastPicked] = 0f;
             }
 
-            return SumEffectiveWeights();
+            float total = SumEffectiveWeights();
+            if (float.IsInfinity(total))
+                throw new OverflowException("The total weight overflowed; use smaller weights.");
+            return total;
         }
 
         private bool AnyPickableExcept(int excluded)

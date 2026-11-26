@@ -298,18 +298,94 @@ namespace ShadowLib.Tests
         {
             var t = PlainTable();
             foreach (var s in Letters) t.SetStock(s, 3);
+            t.SetLastPicked("B");
             bool explode = true;
-            t.SetInfluence("D", 1f, 8f, () => explode ? throw new InvalidOperationException("boom") : 0f);
+            t.SetInfluence("D", 1f, 8f, () => explode ? throw new FormatException("boom") : 0f);
             var rng = new Xoshiro128StarStar(123UL);
             var reference = new Xoshiro128StarStar(123UL);
 
-            Assert.Throws<InvalidOperationException>(() => t.Sample(rng));
+            Assert.Throws<FormatException>(() => t.Sample(rng));
+            Assert.Throws<FormatException>(() => t.TrySample(rng, out _));
+            Assert.Throws<FormatException>(() => t.SampleDistinct(rng, new string[2]));
             foreach (var s in Letters)
             {
                 t.TryGetStock(s, out int units);
                 Assert.AreEqual(3, units);
             }
+            t.TryGetLastPicked(out string last);
+            Assert.AreEqual("B", last);
             Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+        }
+
+        [Test]
+        public void SetStock_SingleAmount_RejectsZero_NamingUnits()
+        {
+            var t = PlainTable();
+            var ex = Assert.Throws<ArgumentOutOfRangeException>(() => t.SetStock("A", 0));
+            Assert.AreEqual("units", ex!.ParamName);
+        }
+
+        [Test]
+        public void Setters_RejectBadArguments_EvenForMissingItems()
+        {
+            var t = PlainTable();
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetInfluence("Z", -1f, 3f, () => 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetInfluence("Z", 1f, float.PositiveInfinity, () => 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetInfluence("Z", 3f, 1f, () => 0f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetStock("Z", 2, 1));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetWeight("Z", 0f));
+        }
+
+        [Test]
+        public void Weights_RejectNaNAndInfinity()
+        {
+            var t = PlainTable();
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.Add("E", float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.Add("E", float.PositiveInfinity));
+            Assert.Throws<ArgumentOutOfRangeException>(() => t.SetWeight("A", float.NaN));
+        }
+
+        [Test]
+        public void TotalOverflow_ThrowsInsteadOfSkewingPicks()
+        {
+            var t = new DynamicWeightTable<string>();
+            t.Add("A", 2e38f);
+            t.Add("B", 2e38f);
+            t.Add("C", 2e38f);
+            var rng = new Xoshiro128StarStar(123UL);
+            var reference = new Xoshiro128StarStar(123UL);
+
+            Assert.Throws<OverflowException>(() => t.Sample(rng));
+            Assert.Throws<OverflowException>(() => t.TrySample(rng, out _));
+            Assert.Throws<OverflowException>(() => t.GetProbability("A"));
+            Assert.Throws<OverflowException>(() => _ = t.TotalWeight);
+            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+        }
+
+        [Test]
+        public void Picking_DoesNotAllocate_AfterWarmUp()
+        {
+            float corruption = 0.5f;
+            var t = PlainTable();
+            t.PreventRepeat = true;
+            t.SetInfluence("A", 0f, 9f, () => corruption);
+            var rng = new Xoshiro128StarStar(123UL);
+            var results = new string[2];
+            t.Sample(rng);
+            t.SampleDistinct(rng, results);
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 1000; i++)
+            {
+                t.Sample(rng);
+                t.TrySample(rng, out _);
+                t.SampleDistinct(rng, results);
+                _ = t.TotalWeight;
+                _ = t.GetProbability("A");
+            }
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.AreEqual(0, allocated);
         }
 
         [Test]
@@ -404,20 +480,27 @@ namespace ShadowLib.Tests
         [Test]
         public void Queries_DoNotChangeState()
         {
-            var t = PlainTable();
-            t.PreventRepeat = true;
-            t.SetStock("A", 2);
-            t.SetLastPicked("B");
-            var rng = new Xoshiro128StarStar(123UL);
-            var reference = new Xoshiro128StarStar(123UL);
+            DynamicWeightTable<string> Build()
+            {
+                var table = PlainTable();
+                table.PreventRepeat = true;
+                table.SetStock("A", 2);
+                table.SetLastPicked("B");
+                return table;
+            }
+            var queried = Build();
+            var untouched = Build();
 
-            for (int i = 0; i < 100; i++) { _ = t.TotalWeight; _ = t.GetProbability("A"); }
+            for (int i = 0; i < 100; i++) { _ = queried.TotalWeight; _ = queried.GetProbability("A"); }
 
-            t.TryGetStock("A", out int units);
+            queried.TryGetStock("A", out int units);
             Assert.AreEqual(2, units);
-            t.TryGetLastPicked(out string last);
+            queried.TryGetLastPicked(out string last);
             Assert.AreEqual("B", last);
-            Assert.AreEqual(reference.NextFloat(), rng.NextFloat());
+            var rngQueried = new Xoshiro128StarStar(123UL);
+            var rngUntouched = new Xoshiro128StarStar(123UL);
+            for (int i = 0; i < 200; i++)
+                Assert.AreEqual(untouched.Sample(rngUntouched), queried.Sample(rngQueried));
         }
 
         [Test]

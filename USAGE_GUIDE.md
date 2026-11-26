@@ -266,6 +266,8 @@ int count = table.SampleDistinct(rng, offer);    // up to 3 different items
 - **`SampleDistinct`** returns how many items it wrote, which is fewer than requested when the pickable items run out. It reads each influence source once and only its first item is subject to repeat prevention.
 - **Determinism.** Every pick is exactly one `rng.NextFloat()`, and none when nothing is pickable, so the same seed with the same game state replays exactly.
 - **Items are unique.** `Add` throws `ArgumentException` for an item already in the table.
+- **Weights are single-precision.** `NaN` and infinite weights are rejected, and picking throws `OverflowException` if the weights sum past `float.MaxValue`. An item whose weight is tiny next to the total (1 beside 100,000,000) can round away and never be picked, so keep weights within a few orders of magnitude of each other.
+- **Cost.** Each `Sample`, `TotalWeight` and `GetProbability` is one pass over the items. For a large fixed table in a hot loop use `AliasTable<T>`.
 
 Stock and the last pick are state the table does not save. Store and restore them yourself:
 

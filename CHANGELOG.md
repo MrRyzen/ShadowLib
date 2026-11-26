@@ -26,7 +26,6 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 - **Breaking:** `DynamicWeightTable<T>.AddWeight`, `MultiplyWeight`, `ResetWeights`, `UniformWeights`, `NormalizeWeights`, `GetBaseWeight`, `TryGetBaseWeight` and `SetBaseWeight`, along with the base/dynamic weight split. For odds that change with game state use `SetInfluence`; to take an item out use `SetEnabled(item, false)` or `TryRemove`; for a permanent change use `SetWeight`.
 - **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` (namespace `ShadowLib.RNG.Modifiers`). Nothing in the library applied them. `ConditionEvaluator` stays and can drive an influence source. The library no longer uses `System.Text.Json`.
-
 - **Breaking:** static `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(context)`. Replace with `var orchestrator = new Orchestrator(seed);` and `orchestrator.CreateRNG(context)`. Streams from `CreateRNG` are unchanged for the same root seed and context.
 - **Breaking:** the implicit OS-entropy root seed. `Orchestrator` now always needs an explicit seed; pass `Seeding.GenerateSeed64()` for a non-repeatable run.
 - **Breaking:** `XorShift128`. It never implemented `IRandom`; use `Xoshiro128StarStar` or `Xoshiro128`.
@@ -38,6 +37,9 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 - **Breaking:** `DynamicWeightTable<T>.Add` throws `ArgumentException` for an item that is already in the table (it used to add a second entry). This also applies to `TieredTable<T>.AddTier`.
 - **Breaking:** `DynamicWeightTable<T>.SetWeight` now sets the item's one designed weight; there is no separate base weight to reset to.
 - **Behavior change:** `DynamicWeightTable<T>.Sample` throws `InvalidOperationException` whenever nothing is pickable (all items disabled, out of stock or influenced to zero), not only when the table is empty. Results for existing tables with unique items are unchanged for the same seed.
+- **Behavior change:** `DynamicWeightTable<T>.Add` and `SetWeight` reject `NaN` and infinite weights with `ArgumentOutOfRangeException`, and picking throws `OverflowException` if the weights sum past `float.MaxValue` (it used to pick lopsidedly).
+- `DynamicWeightTable<T>` recomputes effective weights on every `Sample`, `TotalWeight` and `GetProbability` call, an O(n) pass instead of a cached binary search, because influence is read at pick time. For large fixed tables sampled in a hot loop, use `AliasTable<T>`.
+- `TieredTable<T>.AddTier` leaves an existing tier untouched if the new items are rejected.
 
 - **Behavior change:** `Seeding.DeriveSeed(uint, string)` now hashes the context with FNV-1a instead of summing its characters, so contexts that are anagrams of each other (`"chunk/1/2"` vs `"chunk/2/1"`) no longer collide. Seeds derived with the 32-bit overload differ from earlier previews; `DeriveSeed64` (and therefore `Orchestrator`) is unchanged.
 - **Behavior change:** `BinPacker.AutoSort` breaks ties between equally sized shapes by input order. Previously the order of ties depended on the runtime's unstable sort, so layouts with many same-sized items may differ from earlier previews.
