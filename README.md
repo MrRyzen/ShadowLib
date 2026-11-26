@@ -68,11 +68,19 @@ using ShadowLib.RNG;
 using ShadowLib.RNG.Distributions;
 using ShadowLib.RNG.Utilities;
 
-// 1. Seed once at boot. Same string = identical world every time.
-Orchestrator.Initialize(Seeding.GenerateSeed64("my-world-seed"));
+// 1. Create one orchestrator per world and keep it in your own manager. Same string = identical world every time.
+var orchestrator = new Orchestrator(Seeding.GenerateSeed64("my-world-seed"));
 
 // 2. Ask the orchestrator for a per-feature stream.
-var lootRng = Orchestrator.CreateRNG("loot");
+var lootRng = orchestrator.CreateRNG("loot");
+
+//    Or a throwaway that still replays:
+var chunkRng = orchestrator.Derive("chunk/3/4");   // same stream every call
+var chestRng = orchestrator.Next("chest");         // next stream in the series
+
+//    Save and restore everything in one call.
+byte[] save = orchestrator.Save();
+orchestrator.Load(save);
 
 // 3. Roll a tiered loot table.
 var loot = new TieredTable<string>();
@@ -180,7 +188,7 @@ CI (`.github/workflows/ci.yml`) runs build+test on every push/PR. Release (`.git
   1. NCalc + System.Text.Json available in the project (NuGetForUnity is the easy path).
   2. The scripting define `SHADOWLIB_NCALC` set in `Project Settings → Player → Scripting Define Symbols`.
   Without these, the optional module is silently excluded from compilation. The core RNG/Spatial/Procedural modules work without any of this.
-- **`XorShift128` does not fully implement `IRandom`.** It exists for legacy reasons; prefer `Xoshiro128StarStar` (the default produced by `Orchestrator.CreateRNG`).
+- **Burst compatibility is not covered by CI.** The `Xoshiro128` struct is unmanaged and tested against the class bit for bit on .NET, but the Burst compiler itself only runs inside Unity.
 - **Roadmap items not yet implemented**: see [`SHADOWLIB_ROADMAP.md`](./SHADOWLIB_ROADMAP.md). `SparseGraph<T>`, polyomino generator, random walk, spaced placement, cellular automata, BSP/WFC/Maze gen are scaffolded or pending.
 - **`CanOccupyCell` is O(w·h)** for region checks — fine for typical inventory grids, slow for huge worlds with large footprints. A bitmask-based fast path is on the roadmap.
 

@@ -8,9 +8,9 @@
 
 - **`IRandom`** — Interface for all RNG sources. State save/restore, seeding, full numeric range generation with bias-free rejection sampling.
 - **`Xoshiro128StarStar`** — Primary RNG. 128-bit state, SplitMix64 seeding, deterministic. Implements `IRandom`.
-- **`XorShift128`** — Legacy/lightweight RNG. Does **not** implement `IRandom` (missing `GetState`/`SetState`/`Seed`/`NextUInt`/`NextULong`/`Range(ulong,ulong)`).
-- **`Orchestrator`** — Central RNG factory. Root seed + context-derived deterministic streams via `CreateRNG(string context)`.
-- **`Seeding`** — 32-bit and 64-bit seed generation (OS CSPRNG, string-based SHA-256, deterministic derivation via FNV-1a + SplitMix64).
+- **`Xoshiro128`** — The same generator as an unmanaged struct for Unity jobs, Burst and ECS. Identical output to `Xoshiro128StarStar` for the same seed; does not implement `IRandom`.
+- **`Orchestrator`** — Instance-based RNG factory owned by the caller. One root seed, three stream kinds: `CreateRNG` (long-lived, cached), `Derive` (throwaway, same stream every call), `Next` (throwaway, next in a replayable series). `DeriveSeed` / `NextSeed` for jobs, `Fork` for child orchestrators, `Save` / `Load` to a `byte[]`. Thread-safe.
+- **`Seeding`** — 32-bit and 64-bit seed generation (OS CSPRNG, string-based SHA-256, deterministic derivation via FNV-1a + SplitMix64, plus an arithmetic-only `DeriveSeed64(root, index)` for jobs).
 - **`UUID`** — Random (v4) and deterministic (v5, RFC 4122) UUID generation with ShadowLib namespace.
 
 ### RNG Distributions

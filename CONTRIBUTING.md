@@ -11,7 +11,7 @@ These exist to keep ShadowLib deterministic, Unity-compatible, and dependency-li
 3. **Editor-only code lives in `Editor/`.** Anything that imports `UnityEditor` belongs there with its own asmdef. There is no `Editor/` folder yet — if you create one, mirror the pattern from `Runtime/`.
 4. **`netstandard2.1` is the floor.** Don't use APIs only present in net6+ (`System.Random.Shared`, generic math, `static abstract` interface members, `DateOnly`, etc.).
 5. **Determinism is non-negotiable.** All randomness must thread through `IRandom`. Never `System.Random`, `UnityEngine.Random`, `DateTime.Now`, or `Guid.NewGuid()` inside the library. Tests must seed explicitly.
-6. **`Orchestrator` is global state.** Avoid taking direct dependencies on it from leaf classes. Take an `IRandom` parameter instead and let the caller decide the context.
+6. **Leaf classes take an `IRandom`, not an `Orchestrator`.** The caller decides which context and which kind of stream the leaf gets.
 
 ## Adding a new module
 
@@ -23,7 +23,7 @@ The expected flow for adding (e.g.) a new RNG distribution:
 4. **Document with XML comments.** `<GenerateDocumentationFile>` is on; missing docs become missing IntelliSense for users.
 5. **Add tests.** Every new public type gets at least one test in `Tests/Runtime/`. Tests must:
    - Seed via `Seeding.GenerateSeed64("name-of-test")`.
-   - Use `Orchestrator.Initialize` *only* if the test cares about orchestrator behavior; otherwise pass an `IRandom` directly.
+   - Create an `Orchestrator` *only* if the test cares about orchestrator behavior; otherwise pass an `IRandom` directly.
    - Be deterministic: same test, same result, every run.
 6. **Update the roadmap.** Move the row from "Pending" to "Done" in `SHADOWLIB_ROADMAP.md`.
 7. **Update `CHANGELOG.md`** under `[Unreleased]`.

@@ -4,7 +4,27 @@ All notable changes to ShadowLib are documented here. The format follows [Keep a
 
 ## [Unreleased]
 
+### Added
+
+- `Orchestrator.Derive(context)`: a throwaway generator that yields the same stream on every call for a context. Nothing is stored.
+- `Orchestrator.Next(context)`: a throwaway generator that is the next in a replayable per-context series.
+- `Orchestrator.DeriveSeed(context)` / `NextSeed(context)`: the seeds behind `Derive` / `Next`, for passing into jobs.
+- `Orchestrator.Save()` / `Load(ReadOnlySpan<byte>)`: a versioned `byte[]` holding the root seed, every long-lived stream's state and every `Next` series position. `Load` restores streams in place and throws `InvalidDataException` on bad input without changing anything.
+- `Orchestrator.Fork(context)` for an independent child orchestrator, and `Orchestrator.RootSeed`.
+- `Xoshiro128`: the xoshiro128** generator as an unmanaged struct for Unity jobs, Burst and ECS. Same output as `Xoshiro128StarStar` for the same seed.
+- `Seeding.DeriveSeed64(ulong rootSeed, ulong index)`: arithmetic-only seed derivation, usable inside jobs.
+- `Orchestrator` is thread-safe. Generators remain single-threaded.
+
+### Removed
+
+- **Breaking:** static `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(context)`. Replace with `var orchestrator = new Orchestrator(seed);` and `orchestrator.CreateRNG(context)`. Streams from `CreateRNG` are unchanged for the same root seed and context.
+- **Breaking:** the implicit OS-entropy root seed. `Orchestrator` now always needs an explicit seed; pass `Seeding.GenerateSeed64()` for a non-repeatable run.
+- **Breaking:** `XorShift128`. It never implemented `IRandom`; use `Xoshiro128StarStar` or `Xoshiro128`.
+
 ### Changed
+
+- **Breaking:** `Orchestrator` is an instance class instead of a static one, so it can be owned by your own manager, one per world or save slot.
+- `Xoshiro128StarStar` is now a thin `IRandom` wrapper over `Xoshiro128`; its output is unchanged.
 
 - **Behavior change:** `Seeding.DeriveSeed(uint, string)` now hashes the context with FNV-1a instead of summing its characters, so contexts that are anagrams of each other (`"chunk/1/2"` vs `"chunk/2/1"`) no longer collide. Seeds derived with the 32-bit overload differ from earlier previews; `DeriveSeed64` (and therefore `Orchestrator`) is unchanged.
 - **Behavior change:** `BinPacker.AutoSort` breaks ties between equally sized shapes by input order. Previously the order of ties depended on the runtime's unstable sort, so layouts with many same-sized items may differ from earlier previews.

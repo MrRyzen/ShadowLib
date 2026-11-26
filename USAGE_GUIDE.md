@@ -18,7 +18,7 @@ This document is the canonical reference for using ShadowLib. It is written for 
 | `ShadowLib.Procedural` | Generation algorithms — bin-packing over `ISpace`, Markov word generation. |
 | `ShadowLib.Optional` (`SHADOWLIB_NCALC` opt-in) | NCalc-driven dynamic weight modifiers + JSON-loaded modifier files. |
 
-If you can't decide between modules, follow the dependency arrow: most things ultimately consume an `IRandom`, which comes from the **`Orchestrator`**. Start there.
+If you can't decide between modules, follow the dependency arrow: most things ultimately consume an `IRandom`, which comes from an **`Orchestrator`**. Start there.
 
 ---
 
@@ -74,29 +74,90 @@ ulong root = Seeding.GenerateSeed64("my-world-string");   // Minecraft-style str
 // or
 ulong root = Seeding.GenerateSeed64();                     // OS CSPRNG (non-reproducible)
 
-Orchestrator.Initialize(root);
+var orchestrator = new Orchestrator(root);
 ```
 
-`Orchestrator` is `static` and process-global. Calling `Initialize` again **clears all previously cached RNGs** — call it once at boot, not per-scene-load (unless you intentionally want a hard reset).
+`Orchestrator` is an ordinary class with no global state. Create one per world, run or save slot and keep it in your own manager; two orchestrators never affect each other. The root seed is always explicit: there is no parameterless constructor.
 
-### 2. Get one stream per system, named by context
+### 2. Get streams from the orchestrator, named by context
+
+There are three kinds. Pick by how long the generator lives and whether a repeat should give the same numbers.
 
 ```csharp
-var lootRng    = Orchestrator.CreateRNG("loot");
-var worldRng   = Orchestrator.CreateRNG("worldgen");
-var aiRng      = Orchestrator.CreateRNG("ai.archer.42");   // dot-paths are fine
+// Long-lived: one stream per system, continues where it left off.
+IRandom lootRng = orchestrator.CreateRNG("loot");
+IRandom aiRng   = orchestrator.CreateRNG("ai.archer.42");   // dot-paths are fine
+
+// Throwaway, repeatable: the same stream every time for the same context.
+IRandom chunkRng = orchestrator.Derive("chunk/3/4");        // regenerate chunk (3,4) identically, any time, in any order
+
+// Throwaway, in series: each call is the next stream for that context.
+IRandom firstChest  = orchestrator.Next("chest");           // chest #0
+IRandom secondChest = orchestrator.Next("chest");           // chest #1, different from #0
 ```
 
-Same context returns the same `IRandom` instance for the lifetime of the process. Same root + same context across runs → identical stream. **Do not** `new Xoshiro128StarStar(...)` directly in feature code — go through `Orchestrator` so streams stay decoupled and reproducible.
+| Method | Lifetime | Same context again gives | Stored in the orchestrator |
+|---|---|---|---|
+| `CreateRNG(context)` | Keep it | The same instance, further along | The stream |
+| `Derive(context)` | Use and drop | A new generator with the identical stream | Nothing |
+| `Next(context)` | Use and drop | A new generator with the next stream in the series | One counter per context |
 
-### 3. Pass `IRandom` down — don't reach for the orchestrator from leaves
+Same root seed + same calls across runs → identical streams. The three kinds never collide: `CreateRNG("loot")`, `Derive("loot")` and `Next("loot")` are unrelated streams.
+
+Prefer `Derive` / `Next` over `new Xoshiro128StarStar(seed)` for throwaways, so they are tied to the root seed and replay with it.
+
+`Fork(context)` returns an independent child orchestrator with its own derived root seed, for handing a subsystem its own. The parent does not track children: save each child yourself.
+
+### 3. Save and load
+
+```csharp
+byte[] save = orchestrator.Save();     // write these bytes wherever your save data lives
+// ...
+orchestrator.Load(save);
+```
+
+A save holds the root seed, the state of every `CreateRNG` stream and the position of every `Next` series. `Derive` needs nothing saved.
+
+- `Load` restores streams **in place**: `IRandom` references you already hold stay valid and continue from the saved point.
+- A `CreateRNG` stream that exists but is not in the save restarts from its seed under the loaded root.
+- After loading, `Next("chest")` continues the series (chest #2 after two saved calls), it does not start over.
+- Bad input (wrong version, truncated, trailing bytes) throws `System.IO.InvalidDataException` and changes nothing.
+
+### 4. Threads, Unity jobs, Burst and ECS
+
+Every `Orchestrator` member is safe to call from multiple threads. The generators it returns are not:
+
+- **One generator per thread or per job iteration.** Never share an `IRandom` or `Xoshiro128` between threads.
+- **`Derive` / `DeriveSeed` are order-independent**, so they are safe to call from anywhere and still replay.
+- **`Next` / `NextSeed` hand out series positions in call order.** Calling them from racing threads is safe but not replayable. Call them from one thread and pass the result in.
+
+Burst cannot use classes, interfaces or strings, so jobs use the `Xoshiro128` struct and numeric seeds:
+
+```csharp
+ulong seed = orchestrator.DeriveSeed("chunks");              // main thread, once
+
+struct ChunkJob : IJobParallelFor
+{
+    public ulong Seed;
+    public void Execute(int index)
+    {
+        var rng = new Xoshiro128(Seeding.DeriveSeed64(Seed, (ulong)index));
+        float density = rng.NextFloat();
+    }
+}
+```
+
+`Xoshiro128` is an unmanaged struct with the same methods and the same output as `Xoshiro128StarStar` for the same seed. It is mutable: keep it in a local or a non-readonly field, and pass it by `ref` if a callee should advance it. The .NET test suite checks that it is unmanaged and matches the class bit for bit; it does not run the Burst compiler.
+
+### 5. Pass `IRandom` down — don't reach for the orchestrator from leaves
 
 Bad:
 
 ```csharp
 public class LootRoller {
+    private readonly Orchestrator _orchestrator;
     public Item Roll() {
-        var rng = Orchestrator.CreateRNG("loot");          // tight coupling
+        var rng = _orchestrator.CreateRNG("loot");         // tight coupling
         return _table.Sample(rng);
     }
 }
@@ -114,7 +175,7 @@ public class LootRoller {
 
 The caller decides which context the leaf belongs to. This makes your code testable (pass a fixed-seed `Xoshiro128StarStar`) and lets the same class be used from different streams.
 
-### 4. Do not mix `System.Random`, `UnityEngine.Random`, or `Guid.NewGuid()` into deterministic flows
+### 6. Do not mix `System.Random`, `UnityEngine.Random`, or `Guid.NewGuid()` into deterministic flows
 
 If you want a deterministic UUID, use:
 
@@ -149,11 +210,11 @@ All `Range(int, int)` / `Range(ulong, ulong)` use **rejection sampling** — the
 
 ### `Xoshiro128StarStar` (preferred)
 
-Default implementation produced by `Orchestrator.CreateRNG`. Fast, 128-bit state, uniform statistical properties. Use this everywhere.
+The `IRandom` implementation every `Orchestrator` method returns. Fast, 128-bit state, uniform statistical properties. Use this everywhere you need an `IRandom`.
 
-### `XorShift128` (legacy — avoid for new code)
+### `Xoshiro128` (struct, for jobs)
 
-Exists for backwards compatibility. **Does not fully implement `IRandom`** (missing `GetState`/`SetState`/`Seed`/`NextUInt`/`NextULong`/`Range(ulong, ulong)`). Treat it as deprecated.
+The same generator as an unmanaged value type: no `IRandom`, no references, identical output for the same seed. Use it inside Unity jobs, Burst code and ECS components; see "Threads, Unity jobs, Burst and ECS" above.
 
 ---
 
@@ -276,7 +337,7 @@ float fbm = noise.Fractal(x, y, octaves: 4);      // fBm layered noise
 float fbm3 = noise.Fractal(x, y, z, octaves: 4, persistence: 0.5f, lacunarity: 2.0f);
 ```
 
-Always seed it from an `IRandom` (don't construct an `IRandom` just for noise — pull one from the `Orchestrator`). The internal permutation table is Fisher-Yates shuffled at construction; same seed → identical noise field.
+Always seed it from an `IRandom` (don't construct an `IRandom` just for noise — pull one from your `Orchestrator`). The internal permutation table is Fisher-Yates shuffled at construction; same seed → identical noise field.
 
 ---
 
@@ -497,7 +558,9 @@ In a non-Unity .NET project this is always available — the .csproj pulls NCalc
 - **`AliasTable` sample is O(1)** with no per-call allocation.
 - Prefer `Range(int, int)` over `(int)(NextFloat() * n)` — the former is bias-free.
 - Avoid LINQ in hot paths; the library never uses LINQ internally and you shouldn't either at scale.
-- `Orchestrator.CreateRNG("ctx")` re-uses the same instance for the same context — *don't* call it per frame; cache the returned `IRandom`.
+- `orchestrator.CreateRNG("ctx")` re-uses the same instance for the same context — *don't* call it per frame; cache the returned `IRandom`.
+- `Derive` and `Next` allocate one small generator per call. In a hot loop or a job, take `DeriveSeed` / `NextSeed` once and build `Xoshiro128` structs from `Seeding.DeriveSeed64(seed, index)` instead.
+- Don't use `CreateRNG` with per-object contexts like `"chunk/3/4"`: every context is cached and saved. That is what `Derive` is for.
 
 ---
 
@@ -505,10 +568,13 @@ In a non-Unity .NET project this is always available — the .csproj pulls NCalc
 
 | Mistake | Fix |
 |---|---|
-| Calling `new Xoshiro128StarStar(seed)` directly | Use `Orchestrator.CreateRNG("context")` so streams stay decoupled. |
-| Calling `Orchestrator.CreateRNG` from a leaf method every call | Cache the returned `IRandom` in a field. |
-| Re-`Initialize`-ing the orchestrator mid-game | This wipes all cached streams. Initialize once at boot. |
-| Using `XorShift128` for new code | It doesn't fully implement `IRandom`. Use `Xoshiro128StarStar`. |
+| Calling `new Xoshiro128StarStar(seed)` with a hand-made seed | Use `orchestrator.Derive("context")` or `Next("context")` so the generator replays with the root seed. |
+| Calling `orchestrator.CreateRNG` from a leaf method every call | Cache the returned `IRandom` in a field. |
+| Using `CreateRNG` for per-chunk or per-entity contexts | Each one is cached and saved forever. Use `Derive`. |
+| Creating a new `Orchestrator` mid-game to "reset" | Streams from the old one keep their old state. Use `Load`, or replace the orchestrator and re-fetch every stream. |
+| Calling `Next` from several threads at once | Safe, but the order is not replayable. Call it from one thread. |
+| Sharing one `IRandom` or `Xoshiro128` across threads or jobs | Generators are single-threaded. One per thread or job iteration. |
+| Storing `Xoshiro128` in a `readonly` field | It's a mutable struct; a readonly copy never advances. |
 | `rng.NextInt() % n` for ranged ints | Biased. Use `rng.Range(0, n)`. |
 | Importing `UnityEngine.*` in `Runtime/` | The asmdef has `noEngineReferences: true`. Keep engine code in `Editor/` or in user-side asmdefs. |
 | Editing `Samples~/` expecting Unity to see it on import | `Samples~/` only ships when imported via Package Manager → "Import" button. The tilde keeps it dormant. |
@@ -523,7 +589,11 @@ Read this section before generating ShadowLib code.
 
 ### How to choose the correct API
 
-1. **Need a random number?** → `Orchestrator.CreateRNG("context").NextInt()` / `Range(...)`. Never `System.Random`, never `UnityEngine.Random`, never `Guid.NewGuid()`.
+1. **Need a random number?** → get an `IRandom` from an `Orchestrator` instance, then `NextInt()` / `Range(...)`. Never `System.Random`, never `UnityEngine.Random`, never `Guid.NewGuid()`.
+   - One stream for a whole system → `orchestrator.CreateRNG("context")`, cached.
+   - Throwaway that must be identical every time (a chunk, an entity by ID) → `orchestrator.Derive("context")`.
+   - Throwaway for a repeated event (each chest, each wave) → `orchestrator.Next("context")`.
+   - Inside a Unity job / Burst → `new Xoshiro128(Seeding.DeriveSeed64(seed, index))` with `seed` from `orchestrator.DeriveSeed("context")`.
 2. **Need weighted picking?**
    - Mutable weights → `DynamicWeightTable<T>`.
    - Immutable + hot loop → `AliasTable<T>`.
@@ -541,9 +611,9 @@ Read this section before generating ShadowLib code.
 
 ### Safe defaults
 
-- For a single throwaway demo: `Orchestrator.Initialize(Seeding.GenerateSeed64("demo")); var rng = Orchestrator.CreateRNG("main");`
+- For a single throwaway demo: `var orchestrator = new Orchestrator(Seeding.GenerateSeed64("demo")); var rng = orchestrator.CreateRNG("main");`
 - For tests: pass a fresh `Xoshiro128StarStar(123UL)` directly — no orchestrator, fully controlled.
-- For a Unity sample: a `MonoBehaviour` with `[Tooltip]`-decorated `string seedString` and `Orchestrator.Initialize(Seeding.GenerateSeed64(seedString))` in `Start()`.
+- For a Unity sample: a `MonoBehaviour` with `[Tooltip]`-decorated `string seedString` and `new Orchestrator(Seeding.GenerateSeed64(seedString))` in `Start()`.
 
 ### Do not hallucinate these
 
@@ -551,6 +621,11 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 
 - `UUID.V4()` / `UUID.V5()` — the methods are `GenerateRandomUUID()` and `GenerateDeterministicUUID(ulong seed, ulong context)`.
 - `Orchestrator.GetRng(string)` — it's `CreateRNG(string)`, which both creates and caches.
+- `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(...)` — removed. `Orchestrator` is an instance: `new Orchestrator(seed)`, then `orchestrator.CreateRNG(...)`.
+- `new Orchestrator()` with no seed — there is no parameterless constructor.
+- `XorShift128` — removed. Use `Xoshiro128StarStar` (class, `IRandom`) or `Xoshiro128` (struct, jobs).
+- `Xoshiro128` implementing `IRandom` — it does not; it is a plain struct. The `IRandom` implementation is `Xoshiro128StarStar`.
+- `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate(rng, cellCount, compactness)` — listed in the roadmap as **pending**, not yet implemented.
 - `RandomWalk`, `SpacedPlacement`, `CellularAutomata`, `SparseGraph<T>.FindPath`, `SparseGraph<T>.GetNodesInRange` — all roadmap-only. Do not write code that calls these.
 - `EffectWheel<,>`, `IEffect<>` — roadmap-only.
@@ -565,9 +640,9 @@ If unsure whether something exists, check `SHADOWLIB_ROADMAP.md` (status table a
 A valid ShadowLib example has these in order, top to bottom:
 
 1. `using` directives for the specific sub-namespaces being used (`ShadowLib.RNG`, `ShadowLib.RNG.Distributions`, etc.).
-2. `Orchestrator.Initialize(Seeding.GenerateSeed64("..."))` exactly once at the top.
-3. One or more `var rng = Orchestrator.CreateRNG("context-name")`, cached in a local or field.
+2. `var orchestrator = new Orchestrator(Seeding.GenerateSeed64("..."))` exactly once at the top.
+3. One or more `var rng = orchestrator.CreateRNG("context-name")`, cached in a local or field.
 4. Whatever distribution / grid / packer the example demonstrates, taking the cached `IRandom`.
 5. No `using UnityEngine` if the file is meant to compile in `Runtime/` — only in `Samples~/`, `Editor/`, or user-game code.
 
-When asked for a "minimal example," produce the smallest snippet that still includes `Initialize` + `CreateRNG`. Skipping seeding is the most common mistake — don't skip it.
+When asked for a "minimal example," produce the smallest snippet that still includes `new Orchestrator(seed)` + `CreateRNG`. Skipping seeding is the most common mistake — don't skip it.
