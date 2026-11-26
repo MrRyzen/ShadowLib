@@ -864,7 +864,7 @@ The following do **not** exist (as of `0.1.0-preview.5`):
 - `Orchestrator.Save()` returning a typed snapshot or JSON — it returns `byte[]`; `Load` takes `ReadOnlySpan<byte>` (a `byte[]` converts implicitly).
 - `Polyomino.Generate` / `Polycube.Generate` returning a `List` of positions — they return the `Polyomino` / `Polycube` struct. Their `max` limits are bounding-box sizes, not coordinates, and there is no per-axis bias parameter.
 - `RandomWalk.Generate(rng, length, bounds: (w, h), bias: new DirectionBias(forward, up, down))` — that was the roadmap sketch. The real call takes `width`, `height`, `start` and a four-weight `DirectionBias(right, left, up, down)`; up is +Y. There is no self-avoiding or eight-direction walk.
-- BSP, WFC, maze generation — roadmap-only. Do not write code that calls these.
+- BSP, WFC, maze generation — deferred, not implemented. Do not write code that calls these.
 - `grid.FindPath(...)`, `Grid2D.AStar`, a pathfinding delegate for walkability, float costs, or a `List` of nodes — none exist. Pathfinding is `GridPathfinder` (managed, (x, y) tuples) or the static `GridAStar` / `GridJumpPointSearch` / `GridFlowField` (cell indices, spans). Costs are bytes (0 = blocked); results are a `PathStatus` plus `out` length and cost.
 - A ShadowLib `IJob`, `NativeArray` overload or ECS system for pathfinding — there is none. Write the job yourself and pass `nativeArray.AsSpan()` into the static functions.
 - Pathfinding on `SpatialGraph3D` or `FieldGrid` — not supported.

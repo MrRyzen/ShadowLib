@@ -70,7 +70,9 @@ float fbm   = noise.Fractal(x, y, octaves: 4); // fBm layered noise
 
 ## Not Yet Implemented
 
-### BSP, WFC, Maze Gen
+### BSP, WFC, Maze Gen (deferred)
+
+Deferred on 2026-11-26: not to be built until a game needs one. No API is designed; each needs its own short design conversation first.
 
 Advanced procedural generation algorithms. High complexity, no dependencies on unbuilt items.
 
@@ -94,6 +96,6 @@ Advanced procedural generation algorithms. High complexity, no dependencies on u
 | 12 | `Random Walk` | `IRandom` | Low | **Done** |
 | 13 | `Spaced Placement` | — | Low | **Done** |
 | 14 | `Cellular Automata` | `FieldGrid` | Medium | **Done** |
-| 15 | BSP, WFC, Maze Gen | — | High | Pending |
+| 15 | BSP, WFC, Maze Gen | — | High | Deferred until a game needs them |
 | 16 | `MarkovChain<T>` | `IRandom` | Medium | **Done** |
 | 17 | `MarkovWordGenerator` | `MarkovChain` | Low | **Done** |
