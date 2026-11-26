@@ -17,8 +17,8 @@ So this roadmap pass is finished. Nothing is in progress.
 - Unity (`L:\Projects\games\ShadowLab`, Unity 6000.6.10f1, Burst 2.0.0): 23/23 EditMode tests against the tarball built from `f70836b`.
 - Version is still `0.1.0-preview.5`. `CHANGELOG.md` `[Unreleased]` holds all three sessions' work, including breaking changes. No release was cut.
 
-- **Determinism was measured across runtimes on 2026-11-26** (see "Determinism results" under Notes). One open finding: `ScalingCurve.Exponential` is not bit-identical between Windows and Linux. The user has not yet said whether to fix it.
-- **Performance was measured in the Unity editor the same day.** Two known slow spots are on hold at the user's request ("hold that"): `DynamicWeightTable.Sample` (about 210 ns per pick from 10 items, against 17 ns for `AliasTable` and about 45 ns for a hand-written cumulative loop) and managed `NextFloat` (about 7 ns, against 4.6 ns for `Unity.Mathematics.Random`). Do not start on them unasked.
+- **Determinism was measured across runtimes on 2026-11-26** (see "Determinism results" under Notes). One open finding: `ScalingCurve.Exponential` is not bit-identical between Windows and Linux. The user has been asked twice whether to fix it and has not answered; it is item 3 under Next Step.
+- **Performance was measured in the Unity editor the same day.** Two slow spots were found, `DynamicWeightTable.Sample` and managed `NextFloat`. The user first said to hold them, then asked for them to be recorded as things to fix; they are items 1 and 2 under Next Step. Not started.
 
 ## Files in Flight
 
@@ -92,11 +92,37 @@ New this session:
 
 ## Next Step
 
-Nothing is queued. The roadmap's remaining entry (BSP, WFC, maze generation) is deferred until the user asks. Things the user may ask for next, none started:
+The roadmap pass is finished (BSP, WFC and maze generation are deferred until the user asks). What is left is the list of things the 2026-11-26 measurements found. The user asked for them to be written down here; **none has been started, and the user has not yet said to start any of them.** Ask which to take first, or take them in this order.
+
+### To fix (found by the speed and determinism runs)
+
+1. **`DynamicWeightTable<T>.Sample` is slow.** Unity editor, Mono, 10 items, plain table with no influence, stock or repeat prevention: about 210 ns per pick. On the same harness `AliasTable<T>.Sample` took 17 ns and a hand-written cumulative loop about 41-46 ns. So a plain table pays roughly five times the cost of the simplest correct code for features it is not using.
+   - Not profiled. First step is to profile `Sample` / `TrySample` and the effective-weight pass in `Runtime/RNG/Distributions/DynamicWeightTable.cs` before changing anything.
+   - Likely shape of the fix: a fast path when no item has influence, stock or a disabled flag and `PreventRepeat` is off (cache the total; one cumulative walk over plain weights).
+   - Must hold: `DynamicWeightTableTests.Sample_PlainTable_SequenceIsPinned` unchanged; exactly one `rng.NextFloat()` per picked item and none when nothing is pickable; no allocation per pick; all influence sources read before any mutation or draw; the fingerprint rows `DynamicWeightTable: plain picks` and `DynamicWeightTable: influence + stock + repeat prevention` unchanged on .NET and Unity.
+   - Measure with `RngSpeedBenchmark.cs` in ShadowLab before and after.
+
+2. **`NextFloat` is slow in managed code.** Unity editor, Mono, per draw: class 7.31 ns, through `IRandom` 7.55 ns, struct 6.70 ns, against 4.56 ns for `Unity.Mathematics.Random` and 7.05 ns for `System.Random.NextDouble()`. Under Burst ours is faster (0.84 ns against 1.20 ns), so this is a managed-only problem.
+   - Not profiled. The suspect is the unsigned-to-float conversion in `(NextUInt() >> 8) * INV_24BIT` (`Runtime/RNG/Sources/Xoshiro128StarStar.cs`, in the `Xoshiro128` struct): Mono converts `uint` to `float` slowly. The shifted value is always below 2^24, so casting it to `int` first gives the same float bits.
+   - Must hold: every `ShadowLib Next*` and `Range*` fingerprint row unchanged on .NET 8, Unity Mono and IL2CPP; `XoshiroBurstTests` still 4/4 (Burst output identical to managed in default and deterministic float modes); the class stays a thin wrapper over the struct.
+   - `NextDouble` and `Range(float)` build on the same conversion pattern; check whether they gain too.
+
+3. **`ScalingCurve.Exponential` is not bit-identical between Windows and Linux.** 1 of 500 values (level 275 of `Exponential(100f, 0.137f)`) differs by one float step; every Linux runtime tried agrees with the others, every Windows runtime with each other. Cause: `MathF.Pow` goes to the platform C library. **Needs the user's go-ahead** because the fix changes a few last bits of today's values (changelog entry).
+   - Fix: the level is an integer, so compute `(1 + rate)^level` by repeated multiplication in a fixed order (exponentiation by squaring), in `double`, then round once.
+   - `ScalingCurve.Logarithmic` matched in the 500-value sample but uses `MathF.Log`, which has the same exposure. A deterministic replacement needs its own algorithm; decide with the user whether to do it or document the limit.
+   - Guard: the fingerprint row `ScalingCurve exponential and logarithmic (MathF.Pow / Log)` must become identical on Windows and Linux.
+
+### Known limits found, to document rather than fix (unless the user says otherwise)
+
+- **Burst fast float mode** (`FloatMode.Fast`) changes `Xoshiro128.Range(float)` and `Range(double)` compared with managed code. Float was already known; double is new from this run. Integers, `NextFloat` and `NextDouble` are unaffected. `USAGE_GUIDE.md` should say: do not use fast float mode for jobs whose ranged float or double draws must replay.
+- **Managed `Range(int)`** costs about twice `Unity.Mathematics.Random.NextInt(min, max)` (4.43 ns against 2.23 ns). Ours uses rejection sampling to stay bias-free; that is the trade, not a defect.
+- **Float arithmetic in the caller** can differ between Mono and .NET before a value ever reaches the library. Worth one sentence in the usage guide's determinism notes.
+
+### Other things the user may ask for, none started
 
 - **A release:** bump `package.json` `version` and `Runtime/ShadowLib.csproj` `<Version>` together, move `[Unreleased]` in `CHANGELOG.md` under the new version, tag `v*.*.*`. The user pushes and tags.
-- **Fix `ScalingCurve.Exponential` across platforms** if the user wants it: `MathF.Pow` goes to the platform C library. The level is an integer, so repeated multiplication (exponentiation by squaring in a fixed order) would be bit-identical everywhere, at the cost of changing a few last bits of today's values. `Logarithmic` matched in the sample but uses `MathF.Log`, which carries the same risk.
-- **ARM64:** nothing has run on ARM. Needs QEMU in Docker or real hardware.
+- **Time the real RNGNeeds:** it is not installed in ShadowLab. If the user imports it, add its rows to `RngSpeedBenchmark.cs` and the determinism runner (API per its docs: `using RNGNeeds;`, `ProbabilityList<T>`, `AddItem(value, probability)`, `PickValue()`).
+- **ARM64:** nothing has run on ARM. Needs QEMU in Docker (a privileged `tonistiigi/binfmt` container; ask first) or real hardware.
 - **Burst timings for pathfinding:** only managed-.NET numbers exist (`GridPathfindingBenchmark`).
 - **Faster flow fields:** a bucket queue instead of the binary heap (marked with a `ponytail:` comment in `GridFlowField.cs`).
 
@@ -121,6 +147,8 @@ Durable facts worth carrying into any future sessions (see also `memory/MEMORY.m
 - **Determinism against the alternatives (Unity editor):** `Unity.Mathematics.Random` float range differs between Mono and Burst even in Burst's default float mode (ours does not). Under Burst's fast float mode our float range and double range differ from managed. `UnityEngine.Random` is one global stream, so any other draw shifts a sequence. `System.Random(seed)` matched between .NET 8 and Unity Mono but exposes no state to save. RNGNeeds itself was never installed or measured; per its docs it draws from `Unity.Mathematics.Random` and seeds from the clock unless given a seed provider.
 - **The same matrix for the other generators (second run, 2026-11-26).** Eight operations each (raw integer, float 0..1, int range, float range, double range, weighted pick, shuffle, unit direction) in the Unity editor and the four built players, managed and Burst. `System.Random(seed)`: identical on all ten runtimes including the .NET containers. ShadowLib `Xoshiro128`: identical on all five Unity runtimes, and managed equals Burst in each (it has no unit-direction call). `Unity.Mathematics.Random`: float range from managed code differs between Mono and IL2CPP builds, and Mono managed differs from Burst; `NextFloat2Direction` / `NextFloat3Direction` differ between Mono and IL2CPP and between managed and Burst on every runtime; its Burst results are the same everywhere. `UnityEngine.Random`: `insideUnitCircle` / `onUnitSphere` differ between Windows and Linux; everything else matched. The fingerprint rows and the throwaway player's `FingerprintRunner.cs` hold the exact operations.
 - **Re-running the cross-runtime check:** `SHADOWLIB_FINGERPRINT_OUT=<file> dotnet test Tests/Runtime/ShadowLib.Tests.csproj -c Release --filter "FullyQualifiedName=ShadowLib.Tests.DeterminismFingerprintTests.WriteFingerprint"` writes `key=hash` lines; diff the files from two runtimes. For players: a project with the package tarball, a copy of `DeterminismFingerprint.cs`, and a `[RuntimeInitializeOnLoadMethod]` that writes the same lines, built with `Unity.exe -batchmode -projectPath <p> -buildTarget Win64|Linux64 [-standaloneBuildSubtarget Server] -executeMethod <Builder>`; Linux server builds run in `ubuntu:22.04` with `-batchmode -nographics`. The editor lives at `L:\Unity Editors\6000.6.10f1\Editor\Unity.exe`, and Linux IL2CPP server builds work from this Windows install.
+- **Speed results (2026-11-26, Unity 6000.6.10f1 editor, Mono, Release code optimization, Burst 2.0.0; ns per call, best of 4).** Raw int / float 0..1 / int in 0..100: `System.Random` 6.04 / 7.05 / 7.69; `UnityEngine.Random` 9.93 / 8.87 / 9.54; `Unity.Mathematics.Random` 2.36 / 4.56 / 2.23; `Xoshiro128StarStar` class 2.62 / 7.31 / 4.43; through `IRandom` 2.87 / 7.55 / 4.64; `Xoshiro128` struct 1.87 / 6.70 / 3.64; `Unity.Mathematics.Random` in a Burst job 1.16 / 1.20 / 1.15; `Xoshiro128` in a Burst job 0.60 / 0.84 / 1.13. Weighted pick from 10 items: `System.Random` + cumulative loop 41.1; `UnityEngine.Random` + loop 45.0; `Unity.Mathematics.Random` + loop 45.8; `DynamicWeightTable.Sample` 210.3; `AliasTable.Sample` 17.2. Editor numbers only: no IL2CPP player timings and no .NET 8 timings were taken.
+- **Where ShadowLib stands against the others, as measured:** faster than `System.Random` and `UnityEngine.Random` on integers, level with `Unity.Mathematics.Random` in managed code and about twice as fast under Burst; the only one of the four that gave identical results for every operation it offers on every runtime tried, managed and Burst; the only one with independent named streams and a whole-world save. Behind on managed `NextFloat`, managed `Range`, and `DynamicWeightTable.Sample`. `System.Random(seed)` was also fully reproducible, so the determinism advantage over it is streams, save/restore and Burst, not reproducibility itself.
 - **Thread-safety contract:** orchestrator stream/seed members take one lock; generators, distributions, `CellularAutomata` instances are single-threaded.
 - **Burst:** `Xoshiro128` is identical to managed output in `FloatMode.Default` and `Deterministic`; `FloatMode.Fast` changes about 1 in 4 results of `Range(float)` / `Range(double)`. IL2CPP player builds are unchecked. Burst accepts `Span<T>` inside jobs and static methods but not as job fields; `ValueTuple` is `LayoutKind.Auto` and is rejected at boundaries (Burst 1.8 docs, read 2026-11-26).
 - **Unity compile coverage is Unity 6 only.** The package claims Unity 2021.3 (C# 9) but nothing has compiled it there.
