@@ -773,7 +773,7 @@ To enable in Unity:
 Then:
 
 ```csharp
-using ShadowLib.RNG.Modifiers;   // ConditionEvaluator is the only type in this namespace
+using ShadowLib.RNG.Utilities;
 
 var ctx = new Dictionary<string, object> {
     ["PlayerLevel"] = 12,
@@ -785,6 +785,10 @@ var evaluator = new ConditionEvaluator();
 table.SetInfluence("Rare", min: 1f, max: 50f,
     () => evaluator.Evaluate("PlayerLevel > 10 && Environment == 'Dungeon'", ctx) ? 1f : 0f);
 ```
+
+An empty condition is true. Anything else that cannot be evaluated throws: a condition that does not parse, a name missing from the context, or a misused function. Nothing is logged and nothing silently becomes `false`, so validate data-driven conditions when you load them (evaluate each once against a sample context) and not in the middle of a pick.
+
+Besides NCalc's built-in functions there are `contains(collection, item)`, `count(collection)` and `distance(a, b)`, which takes two `System.Numerics.Vector3` values (convert a Unity `Vector3` before putting it in the context).
 
 In a non-Unity .NET project this is always available — the .csproj pulls NCalc from NuGet directly, no opt-in needed.
 
@@ -888,7 +892,8 @@ The following do **not** exist (as of `0.1.0`):
 - `SparseGraph<T>`, `FindPath`, `GetNodesInRange`, `Distance`, `FindConnectedComponents`, `SpatialGraph3D.Graph`, `ConnectLayers` — do not exist. The 3D inventory is `SpatialGraph3D<TOccupant>`; its connectivity query is `FindPockets`.
 - `Polycube` / `Polyomino` rotation helpers, and `SpatialGraph3D` implementing `ISpace` or working with `BinPacker` — none of these exist.
 - `DynamicWeightTable<T>.AddWeight` / `MultiplyWeight` / `ResetWeights` / `UniformWeights` / `NormalizeWeights` / `GetBaseWeight` / `SetBaseWeight` — removed. Use `SetInfluence` for odds that change with game state, `SetEnabled(item, false)` to take an item out, `SetWeight` for a permanent change.
-- `WeightModifier<T>`, `ModifierOperation`, `ModifierLoader` — removed. `ConditionEvaluator` still exists, in the `ShadowLib.RNG.Modifiers` namespace (not `ShadowLib.RNG.Utilities` or `ShadowLib.Optional`).
+- `WeightModifier<T>`, `ModifierOperation`, `ModifierLoader` — removed. The `ShadowLib.RNG.Modifiers` namespace is gone too: `ConditionEvaluator` still exists, in `ShadowLib.RNG.Utilities`.
+- `ConditionEvaluator.Evaluate` returning `false` for a broken condition — it throws. `distance(a, b)` takes `System.Numerics.Vector3`, not `UnityEngine.Vector3`.
 - An influence provider interface (`IProbabilityInfluenceProvider` or similar) — there is none; `SetInfluence` takes a `Func<float>`.
 - `DynamicWeightTable<T>` saving its own stock or last pick — it does not; see the save/load snippet in its section.
 - `IRandom.NextBool()` / `IRandom.Pick(...)` — not on the interface. Use `rng.Range(0, 2) == 0` and `RandomUtils.RandomSelect(list, rng)`.

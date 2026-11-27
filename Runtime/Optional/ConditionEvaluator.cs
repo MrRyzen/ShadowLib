@@ -1,63 +1,42 @@
-namespace ShadowLib.RNG.Modifiers
+namespace ShadowLib.RNG.Utilities
 {
     using NCalc;
     using NCalc.Handlers;
     using System;
     using System.Collections.Generic;
     using System.Linq;
+    using System.Numerics;
 
     /// <summary>
     /// Evaluates condition strings using NCalc with custom functions.
     /// </summary>
     public class ConditionEvaluator
     {
-        private struct Vector3
-        {
-            public float X { get; set; }
-            public float Y { get; set; }
-            public float Z { get; set; }
-
-            public Vector3(float x, float y, float z)
-            {
-                X = x;
-                Y = y;
-                Z = z;
-            }
-        }
-
         /// <summary>
-        /// Evaluates an NCalc condition string against named values. An empty condition is true;
-        /// a condition that fails to parse or evaluate is false.
+        /// Evaluates an NCalc condition string against named values. An empty condition is true.
+        /// Besides NCalc's built-ins, <c>contains(collection, item)</c>, <c>count(collection)</c> and
+        /// <c>distance(a, b)</c> (two <see cref="Vector3"/> values) are available.
         /// </summary>
         /// <param name="condition">The expression, for example <c>PlayerLevel &gt; 10</c>.</param>
         /// <param name="context">The values the expression can refer to by name.</param>
+        /// <exception cref="ArgumentNullException"><paramref name="context"/> is null.</exception>
+        /// <exception cref="Exception">
+        /// The condition does not parse, names a value missing from <paramref name="context"/>,
+        /// misuses a function, or does not produce a boolean. The exception is NCalc's own or an <see cref="ArgumentException"/>.
+        /// </exception>
         public bool Evaluate(string condition, Dictionary<string, object> context)
         {
+            if (context == null)
+                throw new ArgumentNullException(nameof(context));
             if (string.IsNullOrWhiteSpace(condition))
                 return true;
 
-            try
-            {
-                var expression = new Expression(condition);
+            var expression = new Expression(condition);
+            foreach (var kvp in context)
+                expression.Parameters[kvp.Key] = kvp.Value;
 
-                // Add all context parameters
-                foreach (var kvp in context)
-                {
-                    expression.Parameters[kvp.Key] = kvp.Value;
-                }
-
-                // Register custom functions
-                expression.EvaluateFunction += HandleCustomFunction;
-
-                var result = expression.Evaluate();
-                return Convert.ToBoolean(result);
-            }
-            catch (Exception ex)
-            {
-                // Log error in production
-                Console.WriteLine($"Failed to evaluate condition '{condition}': {ex.Message}");
-                return false;
-            }
+            expression.EvaluateFunction += HandleCustomFunction;
+            return Convert.ToBoolean(expression.Evaluate());
         }
 
         private void HandleCustomFunction(string name, FunctionArgs args)
@@ -102,20 +81,14 @@ namespace ShadowLib.RNG.Modifiers
             }
         }
 
-        // Assumes vect3 similar to Unity's Vector3 or System.Numerics.Vector3
         private void EvaluateDistance(FunctionArgs args)
         {
             if (args.Parameters.Length < 2)
                 throw new ArgumentException("distance() requires 2 arguments");
+            if (!(args.Parameters[0].Evaluate() is Vector3 from) || !(args.Parameters[1].Evaluate() is Vector3 to))
+                throw new ArgumentException("distance() takes two System.Numerics.Vector3 values");
 
-            var p1 = (Vector3)args.Parameters[0].Evaluate()!;
-            var p2 = (Vector3)args.Parameters[1].Evaluate()!;
-
-            float dx = p2.X - p1.X;
-            float dy = p2.Y - p1.Y;
-            float dz = p2.Z - p1.Z;
-
-            args.Result = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+            args.Result = (double)Vector3.Distance(from, to);
         }
 
         private void EvaluateCount(FunctionArgs args)

@@ -3,7 +3,7 @@
 using System.Collections.Generic;
 using System.Globalization;
 using NUnit.Framework;
-using ShadowLib.RNG.Modifiers;
+using ShadowLib.RNG.Utilities;
 
 namespace ShadowLib.Tests
 {
@@ -29,6 +29,48 @@ namespace ShadowLib.Tests
             {
                 CultureInfo.CurrentCulture = original;
             }
+        }
+
+        [Test]
+        public void EmptyCondition_IsTrue()
+        {
+            Assert.IsTrue(new ConditionEvaluator().Evaluate("  ", Context));
+        }
+
+        [Test]
+        public void MalformedCondition_Throws()
+        {
+            Assert.Catch(() => new ConditionEvaluator().Evaluate("level >", Context));
+        }
+
+        [Test]
+        public void UnknownName_Throws()
+        {
+            Assert.Catch(() => new ConditionEvaluator().Evaluate("missing > 1", Context));
+        }
+
+        [Test]
+        public void NullContext_Throws()
+        {
+            Assert.Throws<System.ArgumentNullException>(() => new ConditionEvaluator().Evaluate("1 == 1", null!));
+        }
+
+        [Test]
+        public void Distance_MeasuresBetweenNumericsVectors()
+        {
+            var context = new Dictionary<string, object>
+            {
+                ["a"] = new System.Numerics.Vector3(0f, 0f, 0f),
+                ["b"] = new System.Numerics.Vector3(3f, 4f, 0f),
+            };
+
+            Assert.IsTrue(new ConditionEvaluator().Evaluate("distance(a, b) == 5", context));
+        }
+
+        [Test]
+        public void Distance_OfSomethingElse_Throws()
+        {
+            Assert.Catch(() => new ConditionEvaluator().Evaluate("distance(level, level) == 0", Context));
         }
 
         [Test]

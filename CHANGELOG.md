@@ -36,7 +36,7 @@ The first release. Everything below is relative to `0.1.0-preview.5`.
 ### Removed
 
 - **Breaking:** `DynamicWeightTable<T>.AddWeight`, `MultiplyWeight`, `ResetWeights`, `UniformWeights`, `NormalizeWeights`, `GetBaseWeight`, `TryGetBaseWeight` and `SetBaseWeight`, along with the base/dynamic weight split. For odds that change with game state use `SetInfluence`; to take an item out use `SetEnabled(item, false)` or `TryRemove`; for a permanent change use `SetWeight`.
-- **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` Nothing in the library applied them. `ConditionEvaluator` stays, still in the `ShadowLib.RNG.Modifiers` namespace, and can drive an influence source. The library no longer uses `System.Text.Json`.
+- **Breaking:** `WeightModifier<T>`, `ModifierOperation` and `ModifierLoader` Nothing in the library applied them. `ConditionEvaluator` stays and can drive an influence source. The library no longer uses `System.Text.Json`.
 - **Breaking:** `SparseGraph<TOccupant>`. It was untested scaffolding with no users; `SpatialGraph3D` no longer sits on top of it.
 - **Breaking:** from `SpatialGraph3D<TOccupant>`: the `Graph` property, `AddNode` (now `AddCell`), `NodeExists` (now `Exists`), `ConnectAdjacent` and `ConnectLayers` (touching cells are always neighbours), the `initialCapacity` constructor parameter, and the `Polyomino` overloads of `AddPocket` / `CanPlace` / `Place` (pass `Polycube.FromPolyomino(shape)`). `AddPocket` now throws when the shape leaves the box instead of clipping it, and `Free` returns whether the item was placed.
 - **Breaking:** static `Orchestrator.Initialize(seed)` and static `Orchestrator.CreateRNG(context)`. Replace with `var orchestrator = new Orchestrator(seed);` and `orchestrator.CreateRNG(context)`. Streams from `CreateRNG` are unchanged for the same root seed and context.
@@ -45,6 +45,8 @@ The first release. Everything below is relative to `0.1.0-preview.5`.
 
 ### Changed
 
+- **Breaking:** `ConditionEvaluator` moved from the `ShadowLib.RNG.Modifiers` namespace, where it was the only type left, to `ShadowLib.RNG.Utilities`. Change the `using` line.
+- **Breaking:** `ConditionEvaluator.Evaluate` throws when a condition cannot be evaluated (it does not parse, names a value missing from the context, or misuses a function) and throws `ArgumentNullException` for a null context. It used to write a line to the console and return `false`. An empty condition is still `true`.
 - **Breaking:** `Orchestrator` is an instance class instead of a static one, so it can be owned by your own manager, one per world or save slot.
 - `Xoshiro128StarStar` is now a thin `IRandom` wrapper over `Xoshiro128`; its output is unchanged.
 - **Breaking:** `DynamicWeightTable<T>.Add` throws `ArgumentException` for an item that is already in the table (it used to add a second entry). This also applies to `TieredTable<T>.AddTier`.
@@ -68,6 +70,7 @@ The first release. Everything below is relative to `0.1.0-preview.5`.
 - `DynamicWeightTable<T>.Sample` is several times faster: a table with no influence, stock, disabled items or repeat prevention now picks in a single pass over cached weights (Unity 6000.6 editor, Mono, one desktop machine: about 210 ns to 48 ns per pick from 10 items), and the other cases no longer copy entries. Pick sequences are unchanged.
 - `NextFloat` and `NextDouble` are faster on Mono (same setup: `NextFloat` about 7.3 ns to 4.9 ns). Same output bits.
 - `ConditionEvaluator` matched custom function names with the current culture, so `CONTAINS(...)` / `DISTANCE(...)` evaluated to `false` under Turkish locales. Matching is now culture-invariant.
+- `ConditionEvaluator`'s `distance(a, b)` never worked: it cast its arguments to a private type no caller could supply, so it always failed. It now takes two `System.Numerics.Vector3` values.
 - `ConditionEvaluator` no longer blocks NCalc's built-in functions (`Max`, `Round`, `Abs`, ...), which previously always evaluated to `false`.
 
 ## [0.1.0-preview.5] — 2026-07-25
