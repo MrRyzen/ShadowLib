@@ -18,6 +18,9 @@ jobs:
   release:
     name: Build, pack & publish
     runs-on: ubuntu-latest
+    env:
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      NUGET_FEED_URL: ${{ secrets.NUGET_FEED_URL }}
 
     steps:
       - name: Checkout
@@ -88,7 +91,8 @@ jobs:
           retention-days: 90
 
       - name: Push to NuGet feed
-        run: dotnet nuget push ./artifacts/nuget/*.nupkg --api-key "${{ secrets.NUGET_API_KEY }}" --source "${{ secrets.NUGET_FEED_URL }}" --skip-duplicate
+        if: env.NUGET_API_KEY != '' && env.NUGET_FEED_URL != ''
+        run: dotnet nuget push ./artifacts/nuget/*.nupkg --api-key "$NUGET_API_KEY" --source "$NUGET_FEED_URL" --skip-duplicate
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
